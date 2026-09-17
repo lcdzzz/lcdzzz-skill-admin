@@ -19,7 +19,7 @@ jobs:
           - runner: macos-14
             artifact: macos-arm64
             archive: tar.gz
-          - runner: macos-13
+          - runner: macos-15-intel
             artifact: macos-x64
             archive: tar.gz
           - runner: windows-latest
