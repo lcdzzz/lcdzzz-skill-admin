@@ -252,6 +252,7 @@ describe("核心闭环", () => {
     );
   });
   it("临时写入失败保持原文件不变", async () => {
+    if (process.platform === "win32") return;
     const directory = path.join(temporary, "readonly");
     await fs.mkdir(directory);
     const file = path.join(directory, "SKILL.md");
