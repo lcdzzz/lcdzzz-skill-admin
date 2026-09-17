@@ -1,7 +1,11 @@
 @echo off
 setlocal
 
-set "ROOT_DIR=%~dp0.."
+if exist "%~dp0build\server\index.js" (
+  set "ROOT_DIR=%~dp0"
+) else (
+  set "ROOT_DIR=%~dp0.."
+)
 if not defined PORT set "PORT=8787"
 
 where node >nul 2>nul

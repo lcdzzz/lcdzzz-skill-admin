@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+if [ -f "$SCRIPT_DIR/build/server/index.js" ]; then
+  ROOT_DIR="$SCRIPT_DIR"
+else
+  ROOT_DIR="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
+fi
 PORT="${PORT:-8787}"
 
 if ! command -v node >/dev/null 2>&1; then
