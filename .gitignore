@@ -1,0 +1,28 @@
+node_modules/
+dist/
+.skill-manager/
+.pnpm-store/
+
+# Local operating-system and IDE files
+.DS_Store
+.idea/
+.vscode/
+
+# Local build, test, and release output
+build/
+release/
+coverage/
+*.log
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Internal planning notes; the public README is the release entrypoint.
+REQUIREMENTS.md
+detailed-design.md
+docs/superpowers/
+
+# Obsolete personal launcher with a machine-specific absolute path
+skill-admin.sh
