@@ -38,13 +38,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
       - run: pnpm build
-      - run: pnpm deploy --prod --legacy --filter . release-runtime
-      - name: Install locked production dependencies
+      - name: Prepare clean runtime dependencies
         shell: bash
         run: |
-          cp pnpm-lock.yaml release-runtime/pnpm-lock.yaml
-          cd release-runtime
-          pnpm install --prod --frozen-lockfile --ignore-workspace --ignore-scripts
+          rm -rf release-runtime
+          mkdir release-runtime
+          cp package.json pnpm-lock.yaml release-runtime/
+          pnpm --dir release-runtime install --prod --frozen-lockfile --ignore-workspace --ignore-scripts
+          cp -R build dist LICENSE README.md release-runtime/
       - run: node scripts/assemble-release.mjs release
 
       - name: Create tarball
