@@ -44,7 +44,7 @@ jobs:
           rm -rf release-runtime
           mkdir release-runtime
           cp package.json pnpm-lock.yaml release-runtime/
-          pnpm --dir release-runtime install --prod --frozen-lockfile --ignore-workspace --ignore-scripts
+          pnpm --dir release-runtime install --prod --frozen-lockfile --ignore-workspace --ignore-scripts --config.node-linker=hoisted
           cp -R build dist LICENSE README.md release-runtime/
       - run: node scripts/assemble-release.mjs release
 
