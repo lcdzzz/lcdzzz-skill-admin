@@ -1,10 +1,12 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
-import { createApp } from "./app";
-import { Manager } from "./service";
-import { Repository } from "./storage";
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+import { createApp } from "./app.js";
+import { Manager } from "./service.js";
+import { Repository } from "./storage.js";
+const root = process.env.SKILL_MANAGER_ROOT
+  ? path.resolve(process.env.SKILL_MANAGER_ROOT)
+  : path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const app = createApp(
   new Manager(new Repository(path.join(root, ".skill-manager"))),
 );

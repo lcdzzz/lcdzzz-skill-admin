@@ -10,7 +10,7 @@ import {
   authorize,
   atomicWrite,
   type Operation,
-} from "./storage";
+} from "./storage.js";
 
 export class Manager {
   private queue: Promise<unknown> = Promise.resolve();

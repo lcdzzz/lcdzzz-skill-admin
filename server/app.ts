@@ -1,7 +1,7 @@
 import express from "express";
 import { z } from "zod";
-import { Manager } from "./service";
-import { Failure } from "./storage";
+import { Manager } from "./service.js";
+import { Failure } from "./storage.js";
 export function createApp(manager: Manager) {
   const app = express();
   app.use((req, res, next) => {

@@ -3,16 +3,24 @@
   "version": "0.0.1",
   "private": false,
   "license": "MIT",
+  "packageManager": "pnpm@11.12.0",
+  "files": [
+    "build/server",
+    "dist",
+    "scripts",
+    "LICENSE",
+    "README.md"
+  ],
   "type": "module",
   "engines": {
     "node": ">=20.19.0"
   },
   "scripts": {
     "dev": "tsx server/index.ts",
-    "build": "tsc --noEmit && vite build",
-    "start": "tsx server/index.ts",
+    "build": "tsc --noEmit && tsc -p tsconfig.server.json && vite build",
+    "start": "NODE_ENV=production node build/server/index.js",
     "test": "vitest run",
-    "format:check": "prettier --check server src tests package.json tsconfig.json"
+    "format:check": "prettier --check server src tests scripts package.json tsconfig.json tsconfig.server.json"
   },
   "dependencies": {
     "@uiw/react-md-editor": "^4.0.7",
