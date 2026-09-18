@@ -72,31 +72,57 @@ export function createApp(manager: Manager) {
               (filters.sort.endsWith("asc") ? 1 : -1) ||
             a.realPath.localeCompare(b.realPath),
         );
-      await manager.recordOperation({
-        operation: "read",
-        status: "success",
-        message: "查询 Skill 列表",
-      });
       return data;
     }),
   );
   app.get(
     "/api/skills/:id",
     route(async (req) => {
-      const data = await manager.detail(req.params.id);
-      await manager.recordOperation({
-        operation: "read",
-        skillId: req.params.id,
-        path: data.realPath,
-        status: "success",
-        message: "查看 Skill 详情",
-      });
-      return data;
+      return manager.detail(req.params.id);
     }),
   );
   app.get(
     "/api/operations",
-    route(async () => ({ operations: await manager.operations() })),
+    route(async (req) => {
+      const { limit } = z
+        .object({ limit: z.coerce.number().int().min(1).max(100).default(10) })
+        .strict()
+        .parse(req.query);
+      return { operations: await manager.operations(limit) };
+    }),
+  );
+  const copySchema = z
+    .object({
+      skillIds: z.array(z.string()).min(1),
+      targetDirectoryIds: z.array(z.string()).min(1),
+    })
+    .strict();
+  app.post(
+    "/api/skills/copy/preview",
+    route((req) => manager.copyPreview(copySchema.parse(req.body))),
+  );
+  app.post(
+    "/api/skills/copy",
+    route((req) => {
+      const body = copySchema
+        .extend({
+          mode: z.enum(["skill_md_only", "full_directory"]),
+          decisions: z
+            .array(
+              z
+                .object({
+                  skillId: z.string(),
+                  targetDirectoryId: z.string(),
+                  action: z.enum(["skip", "overwrite", "cancel"]),
+                })
+                .strict(),
+            )
+            .default([]),
+        })
+        .strict()
+        .parse(req.body);
+      return manager.copy(body);
+    }),
   );
   app.put(
     "/api/skills/:id",

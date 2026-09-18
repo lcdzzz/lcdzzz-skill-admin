@@ -2,7 +2,7 @@ node_modules/
 dist/
 .skill-manager/
 .pnpm-store/
-
+.workbuddy/
 # Local operating-system and IDE files
 .DS_Store
 .idea/
@@ -27,3 +27,4 @@ docs/superpowers/
 
 # Obsolete personal launcher with a machine-specific absolute path
 skill-admin.sh
+

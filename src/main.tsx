@@ -44,6 +44,15 @@ function List() {
   const [directory, setDirectory] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [copyTargets, setCopyTargets] = useState<string[]>([]);
+  const [copyMode, setCopyMode] = useState("skill_md_only");
+  const [copyPreview, setCopyPreview] = useState<any[]>([]);
+  const [copyDecisions, setCopyDecisions] = useState<Record<string, string>>(
+    {},
+  );
+  const [copyResults, setCopyResults] = useState<any[]>([]);
   async function refresh(nextDirectoryFilter = directoryFilter) {
     setBusy(true);
     setError("");
@@ -68,6 +77,66 @@ function List() {
   useEffect(() => {
     void refresh();
   }, []);
+  const selectedSkills = data.skills.filter((skill: any) =>
+    selectedSkillIds.includes(skill.skillId),
+  );
+  const selectedSourceDirectories = new Set(
+    selectedSkills.map((skill: any) => skill.directoryId),
+  );
+  const decisionKey = (skillId: string, directoryId: string) =>
+    `${skillId}:${directoryId}`;
+  async function previewCopy() {
+    setBusy(true);
+    setError("");
+    try {
+      const value = await api("/skills/copy/preview", "POST", {
+        skillIds: selectedSkillIds,
+        targetDirectoryIds: copyTargets,
+      });
+      setCopyPreview(value.items);
+      setCopyDecisions(
+        Object.fromEntries(
+          value.items
+            .filter((item: any) => item.conflict)
+            .map((item: any) => [
+              decisionKey(item.skillId, item.targetDirectoryId),
+              "",
+            ]),
+        ),
+      );
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function executeCopy() {
+    setBusy(true);
+    setError("");
+    try {
+      const decisions = copyPreview
+        .filter((item: any) => item.conflict)
+        .map((item: any) => ({
+          skillId: item.skillId,
+          targetDirectoryId: item.targetDirectoryId,
+          action:
+            copyDecisions[decisionKey(item.skillId, item.targetDirectoryId)],
+        }));
+      const value = await api("/skills/copy", "POST", {
+        skillIds: selectedSkillIds,
+        targetDirectoryIds: copyTargets,
+        mode: copyMode,
+        decisions,
+      });
+      setCopyResults(value.results);
+      setSelectedSkillIds([]);
+      await refresh();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <>
       <div className={styles.heading}>
@@ -76,9 +145,28 @@ function List() {
           <h1>Skill 管理器</h1>
           <p>登记目录，集中查看和维护你的技能。</p>
         </div>
-        <Link className={styles.primary} to="/create">
-          ＋ 新建 Skill
-        </Link>
+        <div className={styles.row}>
+          <Link to="/operations">操作记录</Link>
+          <button
+            disabled={!selectedSkills.length || busy}
+            onClick={() => {
+              if (selectedSourceDirectories.size !== 1) {
+                setError("请选择同一来源目录的 Skill 后再复制");
+                return;
+              }
+              setCopyOpen(true);
+              setCopyPreview([]);
+              setCopyDecisions({});
+              setCopyResults([]);
+            }}
+          >
+            复制 Skill
+            {selectedSkills.length ? `（${selectedSkills.length}）` : ""}
+          </button>
+          <Link className={styles.primary} to="/create">
+            ＋ 新建 Skill
+          </Link>
+        </div>
       </div>
       <details className={styles.panel} open={directories.length === 0}>
         <summary>目录管理 · {directories.length} 个目录</summary>
@@ -169,35 +257,203 @@ function List() {
         <button disabled={busy}>{busy ? "扫描中…" : "搜索 / 刷新"}</button>
       </form>
       <ErrorBox error={error} />
+      {copyOpen && (
+        <section className={styles.panel}>
+          <div className={styles.copyHeader}>
+            <div>
+              <h2>复制 {selectedSkills.length} 个 Skill</h2>
+              <p>选择已登记的目标目录；默认只复制 SKILL.md。</p>
+            </div>
+            <button
+              onClick={() => {
+                setCopyOpen(false);
+                setCopyPreview([]);
+                setCopyResults([]);
+              }}
+            >
+              关闭
+            </button>
+          </div>
+          <label>
+            目标目录
+            <select
+              multiple
+              required
+              size={Math.min(Math.max(directories.length, 2), 5)}
+              value={copyTargets}
+              onChange={(event) => {
+                setCopyTargets(
+                  Array.from(
+                    event.target.selectedOptions,
+                    (option) => option.value,
+                  ),
+                );
+                setCopyPreview([]);
+                setCopyResults([]);
+              }}
+            >
+              {directories.map((directory: any) => (
+                <option
+                  key={directory.directoryId}
+                  value={directory.directoryId}
+                  disabled={!directory.available}
+                >
+                  {directory.path}
+                  {!directory.available ? "（不可用）" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <fieldset className={styles.copyMode}>
+            <legend>复制方式</legend>
+            <label>
+              <input
+                type="radio"
+                value="skill_md_only"
+                checked={copyMode === "skill_md_only"}
+                onChange={(event) => setCopyMode(event.target.value)}
+              />
+              仅复制 SKILL.md（默认）
+            </label>
+            <label>
+              <input
+                type="radio"
+                value="full_directory"
+                checked={copyMode === "full_directory"}
+                onChange={(event) => setCopyMode(event.target.value)}
+              />
+              复制完整 Skill 目录
+            </label>
+          </fieldset>
+          {!copyPreview.length ? (
+            <button
+              className={styles.primary}
+              disabled={!copyTargets.length || busy}
+              onClick={() => void previewCopy()}
+            >
+              {busy ? "检查中…" : "检查冲突"}
+            </button>
+          ) : (
+            <>
+              {copyPreview.some((item: any) => item.conflict) && (
+                <div className={styles.conflicts}>
+                  <h3>发现同名 Skill</h3>
+                  {copyPreview
+                    .filter((item: any) => item.conflict)
+                    .map((item: any) => {
+                      const skill = selectedSkills.find(
+                        (candidate: any) => candidate.skillId === item.skillId,
+                      );
+                      const key = decisionKey(
+                        item.skillId,
+                        item.targetDirectoryId,
+                      );
+                      return (
+                        <label className={styles.conflict} key={key}>
+                          <span>
+                            {skill?.name || skill?.directoryName} →{" "}
+                            {item.targetPath}
+                          </span>
+                          <select
+                            value={copyDecisions[key] || ""}
+                            onChange={(event) =>
+                              setCopyDecisions({
+                                ...copyDecisions,
+                                [key]: event.target.value,
+                              })
+                            }
+                          >
+                            <option value="">请选择</option>
+                            <option value="skip">跳过</option>
+                            <option value="overwrite">覆盖</option>
+                            <option value="cancel">取消</option>
+                          </select>
+                        </label>
+                      );
+                    })}
+                </div>
+              )}
+              <button
+                className={styles.primary}
+                disabled={
+                  busy ||
+                  copyPreview.some(
+                    (item: any) =>
+                      item.conflict &&
+                      !copyDecisions[
+                        decisionKey(item.skillId, item.targetDirectoryId)
+                      ],
+                  )
+                }
+                onClick={() => void executeCopy()}
+              >
+                {busy ? "复制中…" : "开始复制"}
+              </button>
+            </>
+          )}
+          {copyResults.length > 0 && (
+            <div className={styles.copyResults}>
+              <h3>复制结果</h3>
+              {copyResults.map((item: any) => (
+                <p key={`${item.skillId}:${item.directoryId}`}>
+                  <span className={styles[item.status] || styles.invalid}>
+                    {item.status === "success"
+                      ? "成功"
+                      : item.status === "skipped"
+                        ? "已跳过"
+                        : item.status === "cancelled"
+                          ? "已取消"
+                          : "失败"}
+                  </span>{" "}
+                  {item.targetPath}
+                  {item.message ? `：${item.message}` : ""}
+                </p>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
       {data.errors.map((e: any) => (
         <ErrorBox key={e.path} error={`${e.path}：${e.message}`} />
       ))}
       <div className={styles.grid}>
         {data.skills.map((s: any) => (
-          <Link
-            className={styles.card}
-            to={`/skills/${s.skillId}`}
-            key={s.skillId}
-          >
-            <span
-              className={
-                s.fileStatus === "invalid" ? styles.invalid : styles.badge
-              }
-            >
-              {s.fileStatus === "invalid" ? "需要修复" : "正常"}
-            </span>
-            <h2>{s.name}</h2>
-            <p>{s.description || "暂无描述"}</p>
-            <code>{s.realPath}</code>
-            {s.parseError && (
-              <p className={styles.error}>{s.parseError.message}</p>
-            )}
-            <small>
-              {s.modifiedAt
-                ? new Date(s.modifiedAt).toLocaleString("zh-CN")
-                : "修改时间不可用"}
-            </small>
-          </Link>
+          <article className={styles.card} key={s.skillId}>
+            <label className={styles.cardSelection}>
+              <input
+                type="checkbox"
+                checked={selectedSkillIds.includes(s.skillId)}
+                onChange={(event) =>
+                  setSelectedSkillIds(
+                    event.target.checked
+                      ? [...selectedSkillIds, s.skillId]
+                      : selectedSkillIds.filter((id) => id !== s.skillId),
+                  )
+                }
+              />
+              选择
+            </label>
+            <Link className={styles.cardLink} to={`/skills/${s.skillId}`}>
+              <span
+                className={
+                  s.fileStatus === "invalid" ? styles.invalid : styles.badge
+                }
+              >
+                {s.fileStatus === "invalid" ? "需要修复" : "正常"}
+              </span>
+              <h2>{s.name}</h2>
+              <p>{s.description || "暂无描述"}</p>
+              <code>{s.realPath}</code>
+              {s.parseError && (
+                <p className={styles.error}>{s.parseError.message}</p>
+              )}
+              <small>
+                {s.modifiedAt
+                  ? new Date(s.modifiedAt).toLocaleString("zh-CN")
+                  : "修改时间不可用"}
+              </small>
+            </Link>
+          </article>
         ))}
       </div>
       {!busy && data.skills.length === 0 && (
@@ -212,6 +468,98 @@ function List() {
           </p>
         </div>
       )}
+    </>
+  );
+}
+function Operations() {
+  const [operations, setOperations] = useState<any[]>([]);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [limit, setLimit] = useState(10);
+  async function load(nextLimit = limit) {
+    setBusy(true);
+    setError("");
+    try {
+      const value = await api(`/operations?limit=${nextLimit}`);
+      setOperations(value.operations);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  useEffect(() => {
+    void load();
+  }, []);
+  const operationName: Record<string, string> = {
+    create: "创建",
+    read: "查看",
+    update: "修改",
+    delete: "移除登记",
+    copy: "复制",
+  };
+  const statusName: Record<string, string> = {
+    success: "成功",
+    failed: "失败",
+    rolled_back: "已回滚",
+    skipped: "已跳过",
+    cancelled: "已取消",
+  };
+  return (
+    <>
+      <Link to="/">← 返回列表</Link>
+      <div className={styles.heading}>
+        <div>
+          <p className={styles.eyebrow}>本机操作留痕</p>
+          <h1>操作记录</h1>
+          <p>按时间倒序查看创建、修改、复制和目录登记变更。</p>
+        </div>
+        <div className={styles.row}>
+          <label className={styles.operationLimit}>
+            最近
+            <select
+              value={limit}
+              onChange={(event) => {
+                const nextLimit = Number(event.target.value);
+                setLimit(nextLimit);
+                void load(nextLimit);
+              }}
+            >
+              {[10, 20, 50, 100].map((option) => (
+                <option key={option} value={option}>
+                  {option} 条
+                </option>
+              ))}
+            </select>
+          </label>
+          <button disabled={busy} onClick={() => void load()}>
+            {busy ? "刷新中…" : "刷新"}
+          </button>
+        </div>
+      </div>
+      <ErrorBox error={error} />
+      <section className={styles.operationList}>
+        {operations.map((item) => (
+          <article className={styles.operation} key={item.id}>
+            <div className={styles.operationHeader}>
+              <strong>{operationName[item.operation] || item.operation}</strong>
+              <span className={styles[item.status] || styles.invalid}>
+                {statusName[item.status] || item.status}
+              </span>
+              <time>{new Date(item.createdAt).toLocaleString("zh-CN")}</time>
+            </div>
+            {item.path && <code>{item.path}</code>}
+            {item.message && <p>{item.message}</p>}
+            {item.errorCode && <small>错误码：{item.errorCode}</small>}
+          </article>
+        ))}
+        {!busy && operations.length === 0 && (
+          <div className={styles.empty}>
+            <h2>还没有操作记录</h2>
+            <p>创建、修改、复制或移除登记后，记录会显示在这里。</p>
+          </div>
+        )}
+      </section>
     </>
   );
 }
@@ -508,6 +856,7 @@ createRoot(document.getElementById("root")!).render(
     <main className={styles.main}>
       <Routes>
         <Route path="/" element={<List />} />
+        <Route path="/operations" element={<Operations />} />
         <Route path="/skills/:skillId" element={<Detail />} />
         <Route path="/create" element={<Create />} />
         <Route path="*" element={<Link to="/">页面不存在，返回列表</Link>} />

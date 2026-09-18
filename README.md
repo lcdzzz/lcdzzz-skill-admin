@@ -69,7 +69,7 @@ pnpm dev
 
 `SKILL.md` 现在是跨工具的开放格式，支持的 Agent 已经不止一家，而目录名各家各用各的——这正是「Skill 管理起来麻烦」的根源之一。下表是常见约定位置：
 
-> ⚠️ 下表整理于 2026-09，生态变化很快，**请以你本机实际安装位置为准**；目录不存在时，新建一个即可。
+> ⚠️ 下表整理于 2026-09，生态变化很快，**请以你本机实际安装位置为准**；目录不存在时，新建一个即可。少数产品（如豆包 App）把技能放在账号里、不走文件系统，见表格下方的说明。
 
 **主流 Agent**
 
@@ -81,12 +81,15 @@ pnpm dev
 | Cursor | `~/.cursor/skills` | `.cursor/skills` |
 | GitHub Copilot | `~/.copilot/skills` | `.github/skills` |
 | Gemini CLI | `~/.gemini/skills` | `.gemini/skills` |
-| WorkBuddy | `~/.workbuddy/skills` | `.workbuddy/skills` |
-| Qoder | `~/.qoder/skills` | `.qoder/skills` |
-| CodeBuddy | `~/.codebuddy/skills` | `.codebuddy/skills` |
+| WorkBuddy（腾讯） | `~/.workbuddy/skills` | `.workbuddy/skills` |
+| CodeBuddy（腾讯） | `~/.codebuddy/skills` | `.codebuddy/skills` |
+| 豆包工作 DoubaoWork（字节） | `~/.super_doubao/super-doubao-runtime/workspace/.user_skills` | — |
+| Trae（字节） | `~/.trae/skills` | `.trae/skills` |
+| Qoder（阿里） | `~/.qoder/skills` | `.qoder/skills` |
+| QoderWork（阿里） | `~/.qoderwork/skills` | — |
 
 <details>
-<summary>展开：更多 Agent（Windsurf、Cline、Trae、Roo Code、Kiro、OpenCode、Qwen Code、Continue 等）</summary>
+<summary>展开：更多 Agent（Windsurf、Cline、Roo Code、Kiro、OpenCode、Qwen Code、Comate、iFlow、Continue 等）</summary>
 
 | Agent | 用户级（全局） | 项目级 |
 | --- | --- | --- |
@@ -94,10 +97,11 @@ pnpm dev
 | Cline | `~/.cline/skills` | `.cline/skills` |
 | Roo Code | `~/.roo/skills` | `.roo/skills` |
 | Kiro CLI | `~/.kiro/skills` | `.kiro/skills` |
-| Trae | `~/.trae/skills` | `.trae/skills` |
 | Trae CN | `~/.trae-cn/skills` | `.trae/skills` |
 | OpenCode | `~/.config/opencode/skills` | `.opencode/skills` |
 | Qwen Code | `~/.qwen/skills` | `.qwen/skills` |
+| QwenWork（千问办公） | `~/.qwenworkcn/skills` | — |
+| Comate / 文心快码（百度） | `~/.comate/skills` | `.comate/skills` |
 | iFlow CLI | `~/.iflow/skills` | `.iflow/skills` |
 | Continue | `~/.continue/skills` | `.continue/skills` |
 | Amp / Kimi Code CLI | `~/.config/agents/skills` | `.agents/skills` |
@@ -113,9 +117,16 @@ pnpm dev
 
 </details>
 
-> 💡 **小技巧**：`~/.agents/skills`（以及项目内的 `.agents/skills`）是多家 Agent 共同识别的**通用别名**，Cursor、Gemini CLI、Codex CLI、GitHub Copilot 等都会读它。把 Skill 放在这里，再登记这一个目录，往往一次就能覆盖手上大部分 Agent，不必给每家各拷一份。
+**不走文件系统的 Agent（登记不了，别白找）**
+
+| Agent | 说明 |
+| --- | --- |
+| 豆包（App / 网页端） | 技能走账号体系：在「工作」界面用「技能 → 新建 → 上传技能」装压缩包，或用 `/创建技能` 指令创建，安装后绑定账号。**没有 `~/.doubao/skills` 这类目录**，不要去找。桌面上安装回执里显示的 `workspace/.user_skills/<技能名>/` 是平台工作区内的路径，不是你能直接登记的本地目录 |
+| 百度 DuMate | 技能在 App 内管理，通过上传 `.zip` 安装，无本地目录 |
+
+> 💡 **小技巧**：`~/.agents/skills`（以及项目内的 `.agents/skills`）是多家 Agent 共同识别的**通用别名**，Cursor、Gemini CLI、Codex CLI、GitHub Copilot 等都会读它。把 Skill 放在这里，再登记这一个目录，往往一次就能覆盖手上大部分 Agent，不必给每家各拷一份。注意 Claude Code 是例外——它只认自己的 `~/.claude/skills`。
 >
-> 两处细节：Cursor 还会为兼容读取 `.claude/skills`、`.codex/skills` 及对应用户级目录；Gemini CLI 在同一层级里，`.agents/skills` 的优先级高于 `.gemini/skills`。
+> 三处细节：Cursor 还会为兼容读取 `.claude/skills`、`.codex/skills` 及对应用户级目录；Gemini CLI 在同一层级里，`.agents/skills` 的优先级高于 `.gemini/skills`；豆包工作的 Windows 路径是 `%LOCALAPPDATA%\DoubaoWork\User Data\Default\.doubaowork\agent_mode\workspace\.user_skills`。
 
 ## 功能现状
 
@@ -141,6 +152,23 @@ pnpm dev
 - 保存前自动备份（保留最近 10 份）与撤销最近一次保存
 - 辅助文件（`scripts/`、`references/` 等）的只读浏览
 - 一键调用外部编辑器打开 Skill 文件
+- 登记目录时提示常见 Agent 的目录（设计里已定：把通用目录 `~/.agents/skills` 排在首位推荐）
+
+## 路线图（Roadmap）
+
+上一节是「已确认、待补齐」；这里放方向上想做、但还没细化的，**属于设想，不是承诺**：
+
+**1. 让「没有目录」的 Agent 也能管起来**
+
+豆包 App、百度 DuMate 这类产品把技能放在账号或应用内部，本地没有可登记的目录（见上文「不走文件系统的 Agent」）。计划加一个**打包导出**能力：把选中的 Skill 导出成 `.zip`（或平台要求的 `.md` 安装包）并附一份清单，由你手动上传到对应平台。同一份内容，本地能管、平台能装。
+
+**2. 跨目录的对比与同步**
+
+同一个 Skill 躺在几个目录里、版本却各不相同，是目前最容易踩的坑。设想提供同名 Skill 的差异对比，以及可选的同步分发——把一份内容推到多个登记目录。
+
+**3. 明确不做的**
+
+物理删除、完整 Git 历史、云同步、多用户与权限、数据库、文件实时监听、全文检索，在设计阶段就划成了非目标，不会为了它们往代码里塞复杂度。架构上只预留两个扩展点：**来源适配器**（将来接远程来源）和 **存储层实现**（将来换掉 JSON 文件）。
 
 ## 数据、安全与边界
 

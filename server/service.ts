@@ -15,8 +15,11 @@ import {
 export class Manager {
   private queue: Promise<unknown> = Promise.resolve();
   constructor(public repository: Repository) {}
-  async operations() {
-    return this.repository.operations();
+  async operations(limit: number) {
+    return (await this.repository.operations())
+      .slice()
+      .reverse()
+      .slice(0, limit);
   }
   async recordOperation(operation: Omit<Operation, "id" | "createdAt">) {
     await this.repository.appendOperation(operation);
@@ -328,6 +331,187 @@ export class Manager {
         skillId: created[0] && hash(created[0].target),
         skillIds: created.map((target) => hash(target.target)),
       };
+    });
+  }
+  private async copyContext(skillIds: string[], targetDirectoryIds: string[]) {
+    const sources = [] as Awaited<ReturnType<Manager["locate"]>>[];
+    for (const skillId of [...new Set(skillIds)])
+      sources.push(await this.locate(skillId));
+    const sourceDirectoryPath = sources[0]?.record.sourceDirectoryPath;
+    if (!sourceDirectoryPath)
+      throw new Failure("SKILL_NOT_FOUND", "至少选择一个 Skill", 404);
+    if (
+      sources.some(
+        (source) => source.record.sourceDirectoryPath !== sourceDirectoryPath,
+      )
+    )
+      throw new Failure(
+        "COPY_SOURCE_MISMATCH",
+        "一次只能复制同一来源目录的 Skill",
+      );
+    const directories = await this.directories();
+    const targets = [...new Set(targetDirectoryIds)].map((directoryId) => {
+      const directory = directories.find(
+        (item) => item.directoryId === directoryId && item.available,
+      );
+      if (!directory)
+        throw new Failure("DIRECTORY_UNAVAILABLE", "目标登记目录不可用");
+      return directory;
+    });
+    return { sources, targets };
+  }
+  async copyPreview(input: {
+    skillIds: string[];
+    targetDirectoryIds: string[];
+  }) {
+    const { sources, targets } = await this.copyContext(
+      input.skillIds,
+      input.targetDirectoryIds,
+    );
+    const items = [] as any[];
+    for (const source of sources) {
+      for (const directory of targets) {
+        const target = path.join(directory.path, source.record.directoryName);
+        const stat = await fs.lstat(target).catch((error: any) => {
+          if (error.code === "ENOENT") return undefined;
+          throw error;
+        });
+        if (stat) await authorize(directory.path, target);
+        items.push({
+          skillId: source.record.skillId,
+          targetDirectoryId: directory.directoryId,
+          targetPath: target,
+          conflict: Boolean(stat),
+        });
+      }
+    }
+    return { items };
+  }
+  private async copyFile(source: string, target: string) {
+    const targetStat = await fs.lstat(target).catch((error: any) => {
+      if (error.code === "ENOENT") return undefined;
+      throw error;
+    });
+    if (targetStat?.isSymbolicLink())
+      throw new Failure("PATH_NOT_ALLOWED", "目标文件不允许使用符号链接");
+    await atomicWrite(target, await fs.readFile(source));
+  }
+  private async copyDirectoryContents(
+    sourceRoot: string,
+    source: string,
+    targetRoot: string,
+    target: string,
+  ) {
+    for (const entry of await fs.readdir(source, { withFileTypes: true })) {
+      if (entry.isSymbolicLink())
+        throw new Failure("PATH_NOT_ALLOWED", "Skill 内不允许复制符号链接");
+      const sourcePath = path.join(source, entry.name);
+      const targetPath = path.join(target, entry.name);
+      if (entry.isDirectory()) {
+        await fs.mkdir(targetPath, { recursive: true });
+        await authorize(targetRoot, targetPath);
+        await this.copyDirectoryContents(
+          sourceRoot,
+          sourcePath,
+          targetRoot,
+          targetPath,
+        );
+      } else if (entry.isFile()) {
+        await this.copyFile(sourcePath, targetPath);
+      }
+    }
+  }
+  async copy(input: {
+    skillIds: string[];
+    targetDirectoryIds: string[];
+    mode: "skill_md_only" | "full_directory";
+    decisions: {
+      skillId: string;
+      targetDirectoryId: string;
+      action: "skip" | "overwrite" | "cancel";
+    }[];
+  }) {
+    return this.exclusive(async () => {
+      const { sources, targets } = await this.copyContext(
+        input.skillIds,
+        input.targetDirectoryIds,
+      );
+      const decisions = new Map(
+        input.decisions.map((item) => [
+          `${item.skillId}:${item.targetDirectoryId}`,
+          item.action,
+        ]),
+      );
+      const results: any[] = [];
+      for (const source of sources) {
+        for (const directory of targets) {
+          const target = path.join(directory.path, source.record.directoryName);
+          const key = `${source.record.skillId}:${directory.directoryId}`;
+          let status: "success" | "failed" | "skipped" | "cancelled" =
+            "success";
+          let errorCode: string | undefined;
+          let message: string | undefined;
+          try {
+            const existing = await fs.lstat(target).catch((error: any) => {
+              if (error.code === "ENOENT") return undefined;
+              throw error;
+            });
+            const decision = decisions.get(key);
+            if (existing) {
+              await authorize(directory.path, target);
+              if (decision === "skip") {
+                status = "skipped";
+                message = "目标 Skill 已存在，已跳过";
+              } else if (decision === "cancel") {
+                status = "cancelled";
+                message = "目标 Skill 已存在，已取消";
+              } else if (decision !== "overwrite") {
+                throw new Failure(
+                  "COPY_DECISION_REQUIRED",
+                  "目标 Skill 已存在，请选择处理方式",
+                );
+              }
+            }
+            if (status === "success") {
+              if (!existing) await fs.mkdir(target);
+              await authorize(directory.path, target);
+              if (!(await fs.stat(target)).isDirectory())
+                throw new Failure("SKILL_PATH_EXISTS", "目标 Skill 不是目录");
+              if (input.mode === "skill_md_only")
+                await this.copyFile(source.file, path.join(target, "SKILL.md"));
+              else
+                await this.copyDirectoryContents(
+                  source.record.realPath,
+                  source.record.realPath,
+                  directory.path,
+                  target,
+                );
+            }
+          } catch (error: any) {
+            status = "failed";
+            errorCode = error.code || "IO_ERROR";
+            message = error.message;
+          }
+          const result = {
+            skillId: source.record.skillId,
+            directoryId: directory.directoryId,
+            targetPath: target,
+            status,
+            ...(message ? { message } : {}),
+          };
+          results.push(result);
+          await this.recordOperation({
+            operation: "copy",
+            skillId: source.record.skillId,
+            directoryId: directory.directoryId,
+            path: target,
+            status,
+            errorCode,
+            message,
+          });
+        }
+      }
+      return { results };
     });
   }
 }

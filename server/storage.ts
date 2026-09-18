@@ -28,7 +28,7 @@ export async function authorize(root: string, candidate: string) {
     throw new Failure("PATH_NOT_ALLOWED", "符号链接或路径超出登记目录");
   return real;
 }
-export async function atomicWrite(file: string, content: string) {
+export async function atomicWrite(file: string, content: string | Uint8Array) {
   const temporary = path.join(
     path.dirname(file),
     `.skill-manager-${randomUUID()}.tmp`,
@@ -61,11 +61,11 @@ export type State = {
 };
 export type Operation = {
   id: string;
-  operation: "create" | "read" | "update" | "delete";
+  operation: "create" | "read" | "update" | "delete" | "copy";
   skillId?: string;
   directoryId?: string;
   path?: string;
-  status: "success" | "failed" | "rolled_back";
+  status: "success" | "failed" | "rolled_back" | "skipped" | "cancelled";
   errorCode?: string;
   message?: string;
   createdAt: string;

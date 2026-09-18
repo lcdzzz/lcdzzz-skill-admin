@@ -104,6 +104,40 @@ describe("核心闭环", () => {
     expect(updated.description).toBe("用于测试和演示的中文简介");
     expect(updated.content).toContain("Follow these instructions");
   });
+  it("操作记录只保留增删改并按时间倒序限制返回", async () => {
+    const directory = await post("/directories", { path: root });
+    const created = await post("/skills", {
+      targetDirectoryId: directory.body.data.directoryId,
+      directoryName: "tracked-skill",
+      name: "Tracked",
+      description: "记录测试",
+      whenToUse: "测试",
+      instructions: "执行",
+    });
+    const skillId = created.body.data.skillId;
+    const detail = await get(`/skills/${skillId}`);
+    await request(app)
+      .put(`/api/skills/${skillId}`)
+      .set("Host", "127.0.0.1")
+      .send({
+        content: detail.body.data.content,
+        expectedFingerprint: detail.body.data.fingerprint,
+      });
+    await get("/skills");
+    await request(app)
+      .delete(`/api/directories/${directory.body.data.directoryId}`)
+      .set("Host", "127.0.0.1");
+
+    const all = await get("/operations?limit=10");
+    expect(all.status).toBe(200);
+    expect(all.body.data.operations.map((item: any) => item.operation)).toEqual(
+      ["delete", "update", "create"],
+    );
+    const recent = await get("/operations?limit=2");
+    expect(
+      recent.body.data.operations.map((item: any) => item.operation),
+    ).toEqual(["delete", "update"]);
+  });
   it("按目录筛选 Skill", async () => {
     const secondRoot = path.join(temporary, "other-skills");
     await fs.mkdir(secondRoot);
@@ -155,6 +189,196 @@ describe("核心闭环", () => {
       await fs.readFile(path.join(secondRoot, "edited-skill/SKILL.md"), "utf8"),
     ).toBe(content);
   });
+  it("把一个 Skill 的 SKILL.md 复制到多个已登记目录", async () => {
+    const firstTarget = path.join(temporary, "first-target");
+    const secondTarget = path.join(temporary, "second-target");
+    await fs.mkdir(firstTarget);
+    await fs.mkdir(secondTarget);
+    const sourceDirectory = await manager.register(root);
+    const firstTargetDirectory = await manager.register(firstTarget);
+    const secondTargetDirectory = await manager.register(secondTarget);
+    await fs.mkdir(path.join(root, "shared-skill"));
+    await fs.writeFile(
+      path.join(root, "shared-skill/SKILL.md"),
+      "---\nname: shared\ndescription: source\n---\n",
+    );
+    await fs.writeFile(path.join(root, "shared-skill/helper.ts"), "source");
+    const sourceSkill = (
+      await get("/skills?directoryId=" + sourceDirectory.directoryId)
+    ).body.data.skills[0];
+
+    const preview = await post("/skills/copy/preview", {
+      skillIds: [sourceSkill.skillId],
+      targetDirectoryIds: [
+        firstTargetDirectory.directoryId,
+        secondTargetDirectory.directoryId,
+      ],
+    });
+    expect(preview.status).toBe(200);
+    expect(preview.body.data.items.map((item: any) => item.conflict)).toEqual([
+      false,
+      false,
+    ]);
+
+    const copied = await post("/skills/copy", {
+      skillIds: [sourceSkill.skillId],
+      targetDirectoryIds: [
+        firstTargetDirectory.directoryId,
+        secondTargetDirectory.directoryId,
+      ],
+      mode: "skill_md_only",
+      decisions: [],
+    });
+    expect(copied.status).toBe(200);
+    expect(copied.body.data.results.map((item: any) => item.status)).toEqual([
+      "success",
+      "success",
+    ]);
+    for (const target of [firstTarget, secondTarget]) {
+      expect(
+        await fs.readFile(path.join(target, "shared-skill/SKILL.md"), "utf8"),
+      ).toContain("description: source");
+      await expect(
+        fs.stat(path.join(target, "shared-skill/helper.ts")),
+      ).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    }
+  });
+  it("完整复制可覆盖同名文件而保留目标独有文件", async () => {
+    const target = path.join(temporary, "target");
+    await fs.mkdir(target);
+    const sourceDirectory = await manager.register(root);
+    const targetDirectory = await manager.register(target);
+    await fs.mkdir(path.join(root, "complete-skill", "assets"), {
+      recursive: true,
+    });
+    await fs.writeFile(
+      path.join(root, "complete-skill/SKILL.md"),
+      "source skill",
+    );
+    await fs.writeFile(
+      path.join(root, "complete-skill/assets/template.txt"),
+      "source asset",
+    );
+    await fs.mkdir(path.join(target, "complete-skill"));
+    await fs.writeFile(
+      path.join(target, "complete-skill/SKILL.md"),
+      "old skill",
+    );
+    await fs.writeFile(
+      path.join(target, "complete-skill/local.txt"),
+      "keep me",
+    );
+    const sourceSkill = (
+      await get("/skills?directoryId=" + sourceDirectory.directoryId)
+    ).body.data.skills[0];
+
+    const preview = await post("/skills/copy/preview", {
+      skillIds: [sourceSkill.skillId],
+      targetDirectoryIds: [targetDirectory.directoryId],
+    });
+    expect(preview.body.data.items[0].conflict).toBe(true);
+
+    const copied = await post("/skills/copy", {
+      skillIds: [sourceSkill.skillId],
+      targetDirectoryIds: [targetDirectory.directoryId],
+      mode: "full_directory",
+      decisions: [
+        {
+          skillId: sourceSkill.skillId,
+          targetDirectoryId: targetDirectory.directoryId,
+          action: "overwrite",
+        },
+      ],
+    });
+    expect(copied.status).toBe(200);
+    expect(copied.body.data.results[0].status).toBe("success");
+    expect(
+      await fs.readFile(
+        path.join(target, "complete-skill/assets/template.txt"),
+        "utf8",
+      ),
+    ).toBe("source asset");
+    expect(
+      await fs.readFile(path.join(target, "complete-skill/local.txt"), "utf8"),
+    ).toBe("keep me");
+  });
+  it("复制冲突可逐项跳过或取消，单项失败不影响已成功项", async () => {
+    const workingTarget = path.join(temporary, "working-target");
+    const failingTarget = path.join(temporary, "failing-target");
+    await fs.mkdir(workingTarget);
+    await fs.mkdir(failingTarget);
+    const sourceDirectory = await manager.register(root);
+    const workingDirectory = await manager.register(workingTarget);
+    const failingDirectory = await manager.register(failingTarget);
+    await fs.mkdir(path.join(root, "one-skill"));
+    await fs.writeFile(path.join(root, "one-skill/SKILL.md"), "new skill");
+    await fs.mkdir(path.join(failingTarget, "one-skill"));
+    await fs.mkdir(path.join(failingTarget, "one-skill/SKILL.md"));
+    const sourceSkill = (
+      await get("/skills?directoryId=" + sourceDirectory.directoryId)
+    ).body.data.skills[0];
+
+    const copied = await post("/skills/copy", {
+      skillIds: [sourceSkill.skillId],
+      targetDirectoryIds: [
+        workingDirectory.directoryId,
+        failingDirectory.directoryId,
+      ],
+      mode: "skill_md_only",
+      decisions: [
+        {
+          skillId: sourceSkill.skillId,
+          targetDirectoryId: failingDirectory.directoryId,
+          action: "overwrite",
+        },
+      ],
+    });
+    expect(copied.status).toBe(200);
+    expect(copied.body.data.results.map((item: any) => item.status)).toEqual([
+      "success",
+      "failed",
+    ]);
+    expect(
+      await fs.readFile(path.join(workingTarget, "one-skill/SKILL.md"), "utf8"),
+    ).toBe("new skill");
+
+    const conflict = await post("/skills/copy", {
+      skillIds: [sourceSkill.skillId],
+      targetDirectoryIds: [workingDirectory.directoryId],
+      mode: "skill_md_only",
+      decisions: [
+        {
+          skillId: sourceSkill.skillId,
+          targetDirectoryId: workingDirectory.directoryId,
+          action: "skip",
+        },
+      ],
+    });
+    expect(conflict.body.data.results[0].status).toBe("skipped");
+    const cancelled = await post("/skills/copy", {
+      skillIds: [sourceSkill.skillId],
+      targetDirectoryIds: [workingDirectory.directoryId],
+      mode: "skill_md_only",
+      decisions: [
+        {
+          skillId: sourceSkill.skillId,
+          targetDirectoryId: workingDirectory.directoryId,
+          action: "cancel",
+        },
+      ],
+    });
+    expect(cancelled.body.data.results[0].status).toBe("cancelled");
+    expect(
+      await fs.readFile(path.join(workingTarget, "one-skill/SKILL.md"), "utf8"),
+    ).toBe("new skill");
+    expect(
+      (await get("/operations")).body.data.operations
+        .filter((item: any) => item.operation === "copy")
+        .map((item: any) => item.status),
+    ).toEqual(["cancelled", "skipped", "failed", "success"]);
+  });
   it("多目录创建冲突时回滚已创建目录并记录操作", async () => {
     const secondRoot = path.join(temporary, "other-skills");
     await fs.mkdir(secondRoot);
@@ -182,7 +406,7 @@ describe("核心闭环", () => {
       (await get("/operations")).body.data.operations.map(
         (item: any) => item.status,
       ),
-    ).toEqual(["rolled_back", "failed"]);
+    ).toEqual(["failed", "rolled_back"]);
   });
   it("拒绝重叠目录、越界目录名及根外链接", async () => {
     const d = await manager.register(root);
