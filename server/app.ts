@@ -188,6 +188,38 @@ export function createApp(manager: Manager) {
       });
     }),
   );
+  const syncSchema = z
+    .object({
+      sourceDirectoryId: z.string(),
+      targetDirectoryIds: z.array(z.string()).min(1),
+    })
+    .strict();
+  app.post(
+    "/api/skills/sync/preview",
+    route((req) => manager.syncPreview(syncSchema.parse(req.body))),
+  );
+  app.post(
+    "/api/skills/sync",
+    route((req) => {
+      const body = syncSchema
+        .extend({
+          decisions: z
+            .array(
+              z
+                .object({
+                  sourceSkillId: z.string(),
+                  targetDirectoryId: z.string(),
+                  action: z.enum(["skip", "overwrite", "cancel"]),
+                })
+                .strict(),
+            )
+            .default([]),
+        })
+        .strict()
+        .parse(req.body);
+      return manager.sync(body);
+    }),
+  );
   app.use("/api", (_req, res) => {
     res
       .status(404)

@@ -108,11 +108,73 @@ export class Manager {
   async scan() {
     const skills: any[] = [],
       errors: any[] = [];
+    const scanSkill = async (
+      directory: any,
+      candidate: string,
+      directoryName: string | null,
+      isRootSkill: boolean,
+    ) => {
+      const record: any = {
+        skillId: hash(candidate),
+        realPath: candidate,
+        directoryName,
+        isRootSkill,
+        name: directoryName || "",
+        description: "",
+        sourceDirectoryPath: directory.path,
+        directoryId: directory.directoryId,
+        fileStatus: "normal",
+        modifiedAt: null,
+      };
+      try {
+        const real = await authorize(directory.path, candidate);
+        if (!(await fs.stat(real)).isDirectory()) return;
+        const file = path.join(real, "SKILL.md");
+        try {
+          await fs.lstat(file);
+        } catch (e: any) {
+          if (e.code === "ENOENT") return;
+          throw e;
+        }
+        record.skillId = hash(real);
+        record.realPath = real;
+        const safeFile = await authorize(directory.path, file);
+        if (!(await fs.stat(safeFile)).isFile())
+          throw Error("SKILL.md 不是普通文件");
+        const content = await fs.readFile(safeFile, "utf8");
+        record.modifiedAt = (await fs.stat(safeFile)).mtime.toISOString();
+        record.fingerprint = hash(content);
+        if (/^---\r?\n/.test(content)) {
+          const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
+          if (!match) throw Error("YAML front matter 缺少结束标记");
+          const metadata = YAML.parse(match[1]);
+          if (metadata && typeof metadata === "object") {
+            if (typeof metadata.name === "string" && metadata.name)
+              record.name = metadata.name;
+            if (typeof metadata.description === "string")
+              record.description = metadata.description;
+          }
+        }
+        if (isRootSkill && !record.name)
+          throw Error("根 Skill 缺少 front matter name");
+      } catch (e: any) {
+        record.fileStatus = "invalid";
+        record.parseError = {
+          code: e.code || "SKILL_INVALID",
+          message: e.message,
+        };
+      }
+      if (!skills.some((s) => s.skillId === record.skillId))
+        skills.push(record);
+    };
     for (const directory of await this.directories()) {
       if (!directory.available) {
         errors.push({ path: directory.path, message: directory.error });
         continue;
       }
+      const rootFile = path.join(directory.path, "SKILL.md");
+      if ((await fs.lstat(rootFile).catch(() => undefined))?.isFile())
+        await scanSkill(directory, directory.path, null, true);
       let entries;
       try {
         entries = await fs.readdir(directory.path, { withFileTypes: true });
@@ -123,56 +185,7 @@ export class Manager {
       for (const entry of entries) {
         if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
         const candidate = path.join(directory.path, entry.name);
-        let record: any = {
-          skillId: hash(candidate),
-          realPath: candidate,
-          directoryName: entry.name,
-          name: entry.name,
-          description: "",
-          sourceDirectoryPath: directory.path,
-          directoryId: directory.directoryId,
-          fileStatus: "normal",
-          modifiedAt: null,
-        };
-        try {
-          const real = await authorize(directory.path, candidate);
-          if (!(await fs.stat(real)).isDirectory()) continue;
-          const file = path.join(real, "SKILL.md");
-          try {
-            await fs.lstat(file);
-          } catch (e: any) {
-            if (e.code === "ENOENT") continue;
-            throw e;
-          }
-          record = { ...record, skillId: hash(real), realPath: real };
-          const safeFile = await authorize(directory.path, file);
-          if (!(await fs.stat(safeFile)).isFile())
-            throw Error("SKILL.md 不是普通文件");
-          const content = await fs.readFile(safeFile, "utf8");
-          record.modifiedAt = (await fs.stat(safeFile)).mtime.toISOString();
-          record.fingerprint = hash(content);
-          if (/^---\r?\n/.test(content)) {
-            const match = content.match(
-              /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/,
-            );
-            if (!match) throw Error("YAML front matter 缺少结束标记");
-            const metadata = YAML.parse(match[1]);
-            if (metadata && typeof metadata === "object") {
-              if (typeof metadata.name === "string" && metadata.name)
-                record.name = metadata.name;
-              if (typeof metadata.description === "string")
-                record.description = metadata.description;
-            }
-          }
-        } catch (e: any) {
-          record.fileStatus = "invalid";
-          record.parseError = {
-            code: e.code || "SKILL_INVALID",
-            message: e.message,
-          };
-        }
-        if (!skills.some((s) => s.skillId === record.skillId))
-          skills.push(record);
+        await scanSkill(directory, candidate, entry.name, false);
       }
     }
     return { skills, errors };
@@ -505,6 +518,162 @@ export class Manager {
             skillId: source.record.skillId,
             directoryId: directory.directoryId,
             path: target,
+            status,
+            errorCode,
+            message,
+          });
+        }
+      }
+      return { results };
+    });
+  }
+  private async syncContext(
+    sourceDirectoryId: string,
+    targetDirectoryIds: string[],
+  ) {
+    const directories = await this.directories();
+    const sourceDirectory = directories.find(
+      (item) => item.directoryId === sourceDirectoryId && item.available,
+    );
+    if (!sourceDirectory)
+      throw new Failure("DIRECTORY_UNAVAILABLE", "源登记目录不可用");
+    const targets = [...new Set(targetDirectoryIds)].map((directoryId) => {
+      const directory = directories.find(
+        (item) => item.directoryId === directoryId && item.available,
+      );
+      if (!directory)
+        throw new Failure("DIRECTORY_UNAVAILABLE", "目标登记目录不可用");
+      if (directory.directoryId === sourceDirectory.directoryId)
+        throw new Failure("SYNC_SOURCE_TARGET", "源目录不能作为同步目标");
+      return directory;
+    });
+    const sourceSkills = (await this.scan()).skills.filter(
+      (skill) => skill.directoryId === sourceDirectory.directoryId,
+    );
+    const targetSkills = (await this.scan()).skills;
+    const match = (source: any, target: any) =>
+      source.isRootSkill
+        ? target.isRootSkill &&
+          source.fileStatus === "normal" &&
+          target.fileStatus === "normal" &&
+          Boolean(source.name) &&
+          source.name === target.name
+        : !target.isRootSkill && source.directoryName === target.directoryName;
+    return { sourceDirectory, targets, sourceSkills, targetSkills, match };
+  }
+  async syncPreview(input: {
+    sourceDirectoryId: string;
+    targetDirectoryIds: string[];
+  }) {
+    const { sourceSkills, targets, targetSkills, match } =
+      await this.syncContext(input.sourceDirectoryId, input.targetDirectoryIds);
+    const items: any[] = [];
+    for (const source of sourceSkills) {
+      for (const directory of targets) {
+        const target = targetSkills.find(
+          (candidate) =>
+            candidate.directoryId === directory.directoryId &&
+            match(source, candidate),
+        );
+        items.push({
+          sourceSkillId: source.skillId,
+          targetDirectoryId: directory.directoryId,
+          skillName: source.name || source.directoryName,
+          targetPath: target?.realPath || null,
+          match: Boolean(target),
+          conflict: Boolean(target),
+          ...(target
+            ? { targetSkillId: target.skillId }
+            : { reason: "TARGET_MISSING" }),
+        });
+      }
+    }
+    return { items };
+  }
+  async sync(input: {
+    sourceDirectoryId: string;
+    targetDirectoryIds: string[];
+    decisions: {
+      sourceSkillId: string;
+      targetDirectoryId: string;
+      action: "skip" | "overwrite" | "cancel";
+    }[];
+  }) {
+    return this.exclusive(async () => {
+      const { sourceSkills, targets, targetSkills, match } =
+        await this.syncContext(
+          input.sourceDirectoryId,
+          input.targetDirectoryIds,
+        );
+      const decisions = new Map(
+        input.decisions.map((item) => [
+          `${item.sourceSkillId}:${item.targetDirectoryId}`,
+          item.action,
+        ]),
+      );
+      const results: any[] = [];
+      for (const source of sourceSkills) {
+        for (const directory of targets) {
+          const targetSkill = targetSkills.find(
+            (candidate) =>
+              candidate.directoryId === directory.directoryId &&
+              match(source, candidate),
+          );
+          const targetPath = targetSkill?.realPath;
+          const key = `${source.skillId}:${directory.directoryId}`;
+          let status: "success" | "failed" | "skipped" | "cancelled" =
+            "skipped";
+          let errorCode: string | undefined;
+          let message = "目标没有相同 Skill，已跳过";
+          try {
+            if (targetSkill && targetPath) {
+              const action = decisions.get(key);
+              if (action === "skip") message = "已按选择跳过";
+              else if (action === "cancel") {
+                status = "cancelled";
+                message = "已按选择取消";
+              } else if (action !== "overwrite") {
+                throw new Failure(
+                  "SYNC_DECISION_REQUIRED",
+                  "请先选择覆盖、跳过或取消",
+                );
+              } else {
+                const sourceFile = path.join(source.realPath, "SKILL.md");
+                const targetFile = path.join(targetPath, "SKILL.md");
+                if (source.isRootSkill) {
+                  await this.copyFile(sourceFile, targetFile);
+                } else {
+                  await this.copyDirectoryContents(
+                    source.realPath,
+                    source.realPath,
+                    directory.path,
+                    targetPath,
+                  );
+                }
+                status = "success";
+                message = "同步成功";
+              }
+            }
+          } catch (error: any) {
+            status = "failed";
+            errorCode = error.code || "IO_ERROR";
+            message = error.message;
+          }
+          const result = {
+            sourceSkillId: source.skillId,
+            directoryId: directory.directoryId,
+            targetPath:
+              targetPath ||
+              path.join(directory.path, source.directoryName || "SKILL.md"),
+            status,
+            message,
+          };
+          results.push(result);
+          await this.recordOperation({
+            operation: "sync",
+            skillId: source.skillId,
+            directoryId: directory.directoryId,
+            path: result.targetPath,
             status,
             errorCode,
             message,

@@ -53,6 +53,14 @@ function List() {
     {},
   );
   const [copyResults, setCopyResults] = useState<any[]>([]);
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [syncSource, setSyncSource] = useState("");
+  const [syncTargets, setSyncTargets] = useState<string[]>([]);
+  const [syncPreview, setSyncPreview] = useState<any[]>([]);
+  const [syncDecisions, setSyncDecisions] = useState<Record<string, string>>(
+    {},
+  );
+  const [syncResults, setSyncResults] = useState<any[]>([]);
   async function refresh(nextDirectoryFilter = directoryFilter) {
     setBusy(true);
     setError("");
@@ -137,6 +145,59 @@ function List() {
       setBusy(false);
     }
   }
+  const syncDecisionKey = (sourceSkillId: string, targetDirectoryId: string) =>
+    `${sourceSkillId}:${targetDirectoryId}`;
+  async function previewSync() {
+    setBusy(true);
+    setError("");
+    try {
+      const value = await api("/skills/sync/preview", "POST", {
+        sourceDirectoryId: syncSource,
+        targetDirectoryIds: syncTargets,
+      });
+      setSyncPreview(value.items);
+      setSyncDecisions(
+        Object.fromEntries(
+          value.items
+            .filter((item: any) => item.match)
+            .map((item: any) => [
+              syncDecisionKey(item.sourceSkillId, item.targetDirectoryId),
+              "",
+            ]),
+        ),
+      );
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function executeSync() {
+    setBusy(true);
+    setError("");
+    try {
+      const value = await api("/skills/sync", "POST", {
+        sourceDirectoryId: syncSource,
+        targetDirectoryIds: syncTargets,
+        decisions: syncPreview
+          .filter((item: any) => item.match)
+          .map((item: any) => ({
+            sourceSkillId: item.sourceSkillId,
+            targetDirectoryId: item.targetDirectoryId,
+            action:
+              syncDecisions[
+                syncDecisionKey(item.sourceSkillId, item.targetDirectoryId)
+              ],
+          })),
+      });
+      setSyncResults(value.results);
+      await refresh();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <>
       <div className={styles.heading}>
@@ -162,6 +223,19 @@ function List() {
           >
             复制 Skill
             {selectedSkills.length ? `（${selectedSkills.length}）` : ""}
+          </button>
+          <button
+            disabled={busy || !directories.some((item) => item.available)}
+            onClick={() => {
+              setSyncOpen(true);
+              setSyncSource("");
+              setSyncTargets([]);
+              setSyncPreview([]);
+              setSyncDecisions({});
+              setSyncResults([]);
+            }}
+          >
+            同步 Skill
           </button>
           <Link className={styles.primary} to="/create">
             ＋ 新建 Skill
@@ -257,6 +331,163 @@ function List() {
         <button disabled={busy}>{busy ? "扫描中…" : "搜索 / 刷新"}</button>
       </form>
       <ErrorBox error={error} />
+      {syncOpen && (
+        <section className={styles.panel}>
+          <div className={styles.copyHeader}>
+            <div>
+              <h2>同步同名 Skill</h2>
+              <p>只同步目标目录中已经存在的相同 Skill，不会创建缺失项。</p>
+            </div>
+            <button
+              onClick={() => {
+                setSyncOpen(false);
+                setSyncPreview([]);
+                setSyncResults([]);
+              }}
+            >
+              关闭
+            </button>
+          </div>
+          <label>
+            源目录
+            <select
+              value={syncSource}
+              onChange={(event) => {
+                setSyncSource(event.target.value);
+                setSyncPreview([]);
+                setSyncResults([]);
+              }}
+            >
+              <option value="">请选择源目录</option>
+              {directories.map((directory: any) => (
+                <option
+                  key={directory.directoryId}
+                  value={directory.directoryId}
+                  disabled={!directory.available}
+                >
+                  {directory.path}
+                  {!directory.available ? "（不可用）" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            目标目录
+            <select
+              multiple
+              required
+              size={Math.min(Math.max(directories.length, 2), 5)}
+              value={syncTargets}
+              onChange={(event) => {
+                setSyncTargets(
+                  Array.from(
+                    event.target.selectedOptions,
+                    (option) => option.value,
+                  ),
+                );
+                setSyncPreview([]);
+                setSyncResults([]);
+              }}
+            >
+              {directories.map((directory: any) => (
+                <option
+                  key={directory.directoryId}
+                  value={directory.directoryId}
+                  disabled={
+                    !directory.available || directory.directoryId === syncSource
+                  }
+                >
+                  {directory.path}
+                  {!directory.available ? "（不可用）" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          {!syncPreview.length ? (
+            <button
+              className={styles.primary}
+              disabled={!syncSource || !syncTargets.length || busy}
+              onClick={() => void previewSync()}
+            >
+              {busy ? "检查中…" : "检查可同步项"}
+            </button>
+          ) : (
+            <>
+              <div className={styles.conflicts}>
+                <h3>同步预览</h3>
+                {syncPreview.map((item: any) => {
+                  const key = syncDecisionKey(
+                    item.sourceSkillId,
+                    item.targetDirectoryId,
+                  );
+                  return (
+                    <label className={styles.conflict} key={key}>
+                      <span>
+                        {item.skillName} → {item.targetPath || "目标缺失"}
+                        {!item.match ? "（跳过）" : ""}
+                      </span>
+                      {item.match ? (
+                        <select
+                          value={syncDecisions[key] || ""}
+                          onChange={(event) =>
+                            setSyncDecisions({
+                              ...syncDecisions,
+                              [key]: event.target.value,
+                            })
+                          }
+                        >
+                          <option value="">请选择</option>
+                          <option value="skip">跳过</option>
+                          <option value="overwrite">覆盖</option>
+                          <option value="cancel">取消</option>
+                        </select>
+                      ) : null}
+                    </label>
+                  );
+                })}
+              </div>
+              <button
+                className={styles.primary}
+                disabled={
+                  busy ||
+                  syncPreview.some(
+                    (item: any) =>
+                      item.match &&
+                      !syncDecisions[
+                        syncDecisionKey(
+                          item.sourceSkillId,
+                          item.targetDirectoryId,
+                        )
+                      ],
+                  )
+                }
+                onClick={() => void executeSync()}
+              >
+                {busy ? "同步中…" : "开始同步"}
+              </button>
+            </>
+          )}
+          {syncResults.length > 0 && (
+            <div className={styles.copyResults}>
+              <h3>同步结果</h3>
+              {syncResults.map((item: any) => (
+                <p key={`${item.sourceSkillId}:${item.directoryId}`}>
+                  <span className={styles[item.status] || styles.invalid}>
+                    {item.status === "success"
+                      ? "成功"
+                      : item.status === "skipped"
+                        ? "已跳过"
+                        : item.status === "cancelled"
+                          ? "已取消"
+                          : "失败"}
+                  </span>{" "}
+                  {item.targetPath}：{item.message}
+                </p>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
       {copyOpen && (
         <section className={styles.panel}>
           <div className={styles.copyHeader}>
@@ -497,6 +728,7 @@ function Operations() {
     update: "修改",
     delete: "移除登记",
     copy: "复制",
+    sync: "同步",
   };
   const statusName: Record<string, string> = {
     success: "成功",

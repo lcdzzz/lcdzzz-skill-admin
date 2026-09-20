@@ -164,6 +164,114 @@ describe("核心闭环", () => {
     ]);
     expect(secondDirectory.directoryId).not.toBe(firstDirectory.directoryId);
   });
+  it("识别登记目录本身的根 Skill，并按 front matter name 匹配", async () => {
+    const target = path.join(temporary, "target-root-skill");
+    await fs.mkdir(target);
+    const sourceDirectory = await manager.register(root);
+    const targetDirectory = await manager.register(target);
+    await fs.writeFile(
+      path.join(root, "SKILL.md"),
+      "---\nname: root-helper\ndescription: source\n---\nsource\n",
+    );
+    await fs.writeFile(
+      path.join(target, "SKILL.md"),
+      "---\nname: root-helper\ndescription: target\n---\ntarget\n",
+    );
+
+    const skills = (await get("/skills")).body.data.skills;
+    expect(skills).toHaveLength(2);
+    const source = skills.find(
+      (item: any) => item.directoryId === sourceDirectory.directoryId,
+    );
+    expect(source.directoryName).toBeNull();
+    expect(source.isRootSkill).toBe(true);
+    expect(source.name).toBe("root-helper");
+
+    const preview = await post("/skills/sync/preview", {
+      sourceDirectoryId: sourceDirectory.directoryId,
+      targetDirectoryIds: [targetDirectory.directoryId],
+    });
+    expect(preview.status).toBe(200);
+    expect(preview.body.data.items[0]).toMatchObject({
+      match: true,
+      conflict: true,
+    });
+  });
+  it("同步同名 Skill 的完整内容但不创建目标缺失项", async () => {
+    const target = path.join(temporary, "sync-target");
+    await fs.mkdir(target);
+    const sourceDirectory = await manager.register(root);
+    const targetDirectory = await manager.register(target);
+    await fs.mkdir(path.join(root, "shared"), { recursive: true });
+    await fs.mkdir(path.join(root, "source-only"), { recursive: true });
+    await fs.writeFile(
+      path.join(root, "shared/SKILL.md"),
+      "---\nname: shared\ndescription: source\n---\nsource\n",
+    );
+    await fs.writeFile(path.join(root, "shared/helper.txt"), "from source");
+    await fs.writeFile(
+      path.join(root, "source-only/SKILL.md"),
+      "---\nname: source-only\ndescription: only source\n---\n",
+    );
+    await fs.mkdir(path.join(target, "shared"));
+    await fs.writeFile(
+      path.join(target, "shared/SKILL.md"),
+      "---\nname: shared\ndescription: old\n---\nold\n",
+    );
+    await fs.writeFile(path.join(target, "shared/local.txt"), "keep target");
+
+    const preview = await post("/skills/sync/preview", {
+      sourceDirectoryId: sourceDirectory.directoryId,
+      targetDirectoryIds: [targetDirectory.directoryId],
+    });
+    expect(preview.status).toBe(200);
+    expect(preview.body.data.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          skillName: "shared",
+          match: true,
+          conflict: true,
+        }),
+        expect.objectContaining({
+          skillName: "source-only",
+          match: false,
+          reason: "TARGET_MISSING",
+        }),
+      ]),
+    );
+
+    const synced = await post("/skills/sync", {
+      sourceDirectoryId: sourceDirectory.directoryId,
+      targetDirectoryIds: [targetDirectory.directoryId],
+      decisions: [
+        {
+          sourceSkillId: (
+            await get(`/skills?directoryId=${sourceDirectory.directoryId}`)
+          ).body.data.skills.find(
+            (item: any) => item.directoryName === "shared",
+          ).skillId,
+          targetDirectoryId: targetDirectory.directoryId,
+          action: "overwrite",
+        },
+      ],
+    });
+    expect(synced.status).toBe(200);
+    expect(synced.body.data.results[0].status).toBe("success");
+    expect(
+      await fs.readFile(path.join(target, "shared/SKILL.md"), "utf8"),
+    ).toContain("description: source");
+    expect(
+      await fs.readFile(path.join(target, "shared/helper.txt"), "utf8"),
+    ).toBe("from source");
+    expect(
+      await fs.readFile(path.join(target, "shared/local.txt"), "utf8"),
+    ).toBe("keep target");
+    await expect(
+      fs.stat(path.join(target, "source-only")),
+    ).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
   it("把编辑后的内容一次创建到多个目录", async () => {
     const secondRoot = path.join(temporary, "other-skills");
     await fs.mkdir(secondRoot);

@@ -61,7 +61,7 @@ export type State = {
 };
 export type Operation = {
   id: string;
-  operation: "create" | "read" | "update" | "delete" | "copy";
+  operation: "create" | "read" | "update" | "delete" | "copy" | "sync";
   skillId?: string;
   directoryId?: string;
   path?: string;
