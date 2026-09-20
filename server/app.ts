@@ -57,14 +57,18 @@ export function createApp(manager: Manager) {
         })
         .strict()
         .parse(req.query);
-      const data = await manager.scan();
+      const data = await manager.unifiedSkills();
       const query = (filters.query || "").toLocaleLowerCase();
       data.skills = data.skills
         .filter((s) =>
           `${s.name} ${s.description}`.toLocaleLowerCase().includes(query),
         )
         .filter(
-          (s) => !filters.directoryId || s.directoryId === filters.directoryId,
+          (s) =>
+            !filters.directoryId ||
+            s.instances.some(
+              (instance: any) => instance.directoryId === filters.directoryId,
+            ),
         )
         .sort(
           (a, b) =>
@@ -79,6 +83,16 @@ export function createApp(manager: Manager) {
     "/api/skills/:id",
     route(async (req) => {
       return manager.detail(req.params.id);
+    }),
+  );
+  app.put(
+    "/api/skills/:id/default-directory",
+    route((req) => {
+      const body = z
+        .object({ directoryId: z.string().nullable() })
+        .strict()
+        .parse(req.body);
+      return manager.setDefaultDirectory(req.params.id, body.directoryId);
     }),
   );
   app.get(

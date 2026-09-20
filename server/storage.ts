@@ -58,6 +58,8 @@ export type State = {
   schemaVersion: 1;
   directories: { path: string; enabled: boolean }[];
   skills: Record<string, unknown>;
+  defaultDirectories?: Record<string, string>;
+  syncFingerprints?: Record<string, Record<string, string>>;
 };
 export type Operation = {
   id: string;
@@ -105,6 +107,12 @@ export class Repository {
         !value.skills ||
         Array.isArray(value.skills) ||
         typeof value.skills !== "object" ||
+        (value.defaultDirectories !== undefined &&
+          (typeof value.defaultDirectories !== "object" ||
+            Array.isArray(value.defaultDirectories))) ||
+        (value.syncFingerprints !== undefined &&
+          (typeof value.syncFingerprints !== "object" ||
+            Array.isArray(value.syncFingerprints))) ||
         value.directories.some(
           (d: any) =>
             typeof d.path !== "string" ||
@@ -113,7 +121,11 @@ export class Repository {
         )
       )
         throw Error();
-      return value;
+      return {
+        ...value,
+        defaultDirectories: value.defaultDirectories || {},
+        syncFingerprints: value.syncFingerprints || {},
+      };
     } catch {
       throw new Failure(
         "METADATA_CORRUPTED",

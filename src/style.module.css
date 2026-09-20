@@ -270,6 +270,13 @@
 .card small {
   margin-top: 20px;
 }
+.usageCount {
+  display: inline-block;
+  margin: 3px 0 12px;
+  color: #388269;
+  font-size: 12px;
+  font-weight: 600;
+}
 .badge,
 .invalid {
   display: inline-block;
@@ -311,6 +318,89 @@
   font-weight: 400;
   overflow-wrap: anywhere;
 }
+.usagePanel {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 5;
+  width: min(360px, calc(100vw - 48px));
+  max-height: 42vh;
+  overflow: auto;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid #cbded3;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px #20332d1f;
+}
+.usagePanelHeader,
+.usageItem {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+.usagePanelHeader {
+  margin-bottom: 12px;
+  color: #216d53;
+}
+.usagePanelHeader > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.usageToggle,
+.usageExpand {
+  padding: 4px 9px;
+  color: #388269;
+  font-size: 12px;
+}
+.usageExpand {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 5;
+  box-shadow: 0 8px 22px #20332d1f;
+}
+.usageItem {
+  align-items: flex-start;
+  padding: 10px 0;
+  border-top: 1px solid #edf1ed;
+}
+.usageItem > div {
+  min-width: 0;
+}
+.usageItem code {
+  display: block;
+  margin-top: 5px;
+}
+.usageItem button {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+.primaryTag,
+.mirrorTag {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-size: 11px;
+}
+.primaryTag {
+  background: #e8f4ed;
+  color: #23774e;
+}
+.mirrorTag {
+  background: #f2f1e7;
+  color: #766c32;
+}
+.conflictTag {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: #fff1df;
+  color: #936113;
+  font-size: 11px;
+}
 @media (max-width: 750px) {
   .main {
     padding: 20px 16px;
@@ -343,5 +433,14 @@
   .operationHeader time {
     width: 100%;
     margin-left: 0;
+  }
+  .usagePanel {
+    right: 12px;
+    bottom: 12px;
+    width: calc(100vw - 24px);
+  }
+  .usageExpand {
+    right: 12px;
+    bottom: 12px;
   }
 }

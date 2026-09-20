@@ -164,6 +164,134 @@ describe("核心闭环", () => {
     ]);
     expect(secondDirectory.directoryId).not.toBe(firstDirectory.directoryId);
   });
+  it("把不同目录中相同 name 的 Skill 聚合为一个统一 Skill", async () => {
+    const secondRoot = path.join(temporary, "other-skills");
+    await fs.mkdir(secondRoot);
+    const firstDirectory = await manager.register(root);
+    const secondDirectory = await manager.register(secondRoot);
+    for (const directory of [root, secondRoot]) {
+      await fs.mkdir(path.join(directory, "shared-skill"));
+      await fs.writeFile(
+        path.join(directory, "shared-skill/SKILL.md"),
+        "---\nname: shared\ndescription: same\n---\n",
+      );
+    }
+
+    const all = await get("/skills");
+    expect(all.body.data.skills).toHaveLength(1);
+    expect(all.body.data.skills[0]).toMatchObject({
+      name: "shared",
+      instances: expect.arrayContaining([
+        expect.objectContaining({ directoryId: firstDirectory.directoryId }),
+        expect.objectContaining({ directoryId: secondDirectory.directoryId }),
+      ]),
+    });
+
+    const filtered = await get(
+      `/skills?directoryId=${secondDirectory.directoryId}`,
+    );
+    expect(filtered.body.data.skills).toHaveLength(1);
+  });
+  it("设置默认目录后统一保存并同步已存在副本", async () => {
+    const secondRoot = path.join(temporary, "other-skills");
+    await fs.mkdir(secondRoot);
+    const firstDirectory = await manager.register(root);
+    const secondDirectory = await manager.register(secondRoot);
+    for (const [directory, description] of [
+      [root, "old source"],
+      [secondRoot, "old copy"],
+    ] as const) {
+      await fs.mkdir(path.join(directory, "shared-skill"));
+      await fs.writeFile(
+        path.join(directory, "shared-skill/SKILL.md"),
+        `---\nname: shared\ndescription: ${description}\n---\nold\n`,
+      );
+    }
+    const skill = (await get("/skills")).body.data.skills[0];
+    const selected = await request(app)
+      .put(`/api/skills/${skill.skillId}/default-directory`)
+      .set("Host", "127.0.0.1")
+      .send({ directoryId: firstDirectory.directoryId });
+    expect(selected.status).toBe(200);
+
+    const detail = (await get(`/skills/${skill.skillId}`)).body.data;
+    expect(detail.defaultDirectoryId).toBe(firstDirectory.directoryId);
+    expect(detail.defaultInstance.directoryId).toBe(firstDirectory.directoryId);
+    const updatedContent =
+      "---\nname: shared\ndescription: new\n---\nupdated\n";
+    const saved = await request(app)
+      .put(`/api/skills/${skill.skillId}`)
+      .set("Host", "127.0.0.1")
+      .send({
+        content: updatedContent,
+        expectedFingerprint: detail.fingerprint,
+      });
+    expect(saved.status).toBe(200);
+    expect(
+      await fs.readFile(path.join(root, "shared-skill/SKILL.md"), "utf8"),
+    ).toBe(updatedContent);
+    expect(
+      await fs.readFile(path.join(secondRoot, "shared-skill/SKILL.md"), "utf8"),
+    ).toBe(updatedContent);
+    expect((await get(`/skills/${skill.skillId}`)).body.data.instances).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ directoryId: secondDirectory.directoryId }),
+      ]),
+    );
+  });
+  it("副本被外部修改时报告冲突，缺失副本不自动创建", async () => {
+    const secondRoot = path.join(temporary, "other-skills");
+    await fs.mkdir(secondRoot);
+    const firstDirectory = await manager.register(root);
+    const secondDirectory = await manager.register(secondRoot);
+    await fs.mkdir(path.join(root, "shared-skill"));
+    await fs.writeFile(
+      path.join(root, "shared-skill/SKILL.md"),
+      "---\nname: shared\n---\nold\n",
+    );
+    const skill = (await get("/skills")).body.data.skills[0];
+    await request(app)
+      .put(`/api/skills/${skill.skillId}/default-directory`)
+      .set("Host", "127.0.0.1")
+      .send({ directoryId: firstDirectory.directoryId });
+    const detail = (await get(`/skills/${skill.skillId}`)).body.data;
+    expect(
+      detail.directoryUsages.find(
+        (item: any) => item.directoryId === secondDirectory.directoryId,
+      ).status,
+    ).toBe("missing");
+
+    const saved = await request(app)
+      .put(`/api/skills/${skill.skillId}`)
+      .set("Host", "127.0.0.1")
+      .send({
+        content: "---\nname: shared\n---\nnew\n",
+        expectedFingerprint: detail.fingerprint,
+      });
+    expect(saved.status).toBe(200);
+    expect(saved.body.data.sync).toEqual([]);
+    await expect(
+      fs.stat(path.join(secondRoot, "shared-skill/SKILL.md")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+
+    await fs.mkdir(path.join(secondRoot, "shared-skill"));
+    await fs.writeFile(
+      path.join(secondRoot, "shared-skill/SKILL.md"),
+      "---\nname: shared\n---\nexternal\n",
+    );
+    const nextDetail = (await get(`/skills/${skill.skillId}`)).body.data;
+    const conflict = await request(app)
+      .put(`/api/skills/${skill.skillId}`)
+      .set("Host", "127.0.0.1")
+      .send({
+        content: "---\nname: shared\n---\nlatest\n",
+        expectedFingerprint: nextDetail.fingerprint,
+      });
+    expect(conflict.body.data.sync[0].status).toBe("conflict");
+    expect(
+      await fs.readFile(path.join(secondRoot, "shared-skill/SKILL.md"), "utf8"),
+    ).toContain("external");
+  });
   it("识别登记目录本身的根 Skill，并按 front matter name 匹配", async () => {
     const target = path.join(temporary, "target-root-skill");
     await fs.mkdir(target);
@@ -179,13 +307,14 @@ describe("核心闭环", () => {
     );
 
     const skills = (await get("/skills")).body.data.skills;
-    expect(skills).toHaveLength(2);
+    expect(skills).toHaveLength(1);
     const source = skills.find(
       (item: any) => item.directoryId === sourceDirectory.directoryId,
     );
     expect(source.directoryName).toBeNull();
     expect(source.isRootSkill).toBe(true);
     expect(source.name).toBe("root-helper");
+    expect(source.instances).toHaveLength(2);
 
     const preview = await post("/skills/sync/preview", {
       sourceDirectoryId: sourceDirectory.directoryId,

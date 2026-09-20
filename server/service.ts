@@ -93,6 +93,14 @@ export class Manager {
       const state = await this.repository.read();
       const removed = state.directories.find((d) => hash(d.path) === id);
       state.directories = state.directories.filter((d) => hash(d.path) !== id);
+      for (const [skillKey, directoryId] of Object.entries(
+        state.defaultDirectories || {},
+      )) {
+        if (directoryId === id) {
+          delete state.defaultDirectories![skillKey];
+          delete state.syncFingerprints![skillKey];
+        }
+      }
       await this.repository.write(state);
       if (removed)
         await this.recordOperation({
@@ -190,8 +198,105 @@ export class Manager {
     }
     return { skills, errors };
   }
+  private unifiedKey(skill: any) {
+    return skill.name || skill.directoryName || `root:${skill.directoryId}`;
+  }
+  async unifiedSkills() {
+    const scanned = await this.scan();
+    const state = await this.repository.read();
+    const groups = new Map<string, any>();
+    for (const instance of scanned.skills) {
+      const key = this.unifiedKey(instance);
+      const group = groups.get(key);
+      if (group) {
+        group.instances.push(instance);
+        if (!group.description && instance.description)
+          group.description = instance.description;
+        if (
+          instance.modifiedAt &&
+          (!group.modifiedAt || instance.modifiedAt > group.modifiedAt)
+        )
+          group.modifiedAt = instance.modifiedAt;
+        continue;
+      }
+      groups.set(key, {
+        ...instance,
+        skillId: hash(key),
+        unifiedKey: key,
+        instances: [instance],
+      });
+    }
+    return {
+      skills: [...groups.values()].map((group) => {
+        const defaultDirectoryId = state.defaultDirectories?.[group.unifiedKey];
+        const defaultInstance = group.instances.find(
+          (instance: any) => instance.directoryId === defaultDirectoryId,
+        );
+        const primary = defaultInstance || group.instances[0];
+        return {
+          ...group,
+          ...primary,
+          skillId: group.skillId,
+          unifiedKey: group.unifiedKey,
+          instances: group.instances,
+          defaultDirectoryId,
+          defaultInstance: defaultInstance || null,
+        };
+      }),
+      errors: scanned.errors,
+    };
+  }
+  private async unifiedById(id: string) {
+    return (await this.unifiedSkills()).skills.find(
+      (skill) => skill.skillId === id,
+    );
+  }
+  async setDefaultDirectory(skillId: string, directoryId: string | null) {
+    return this.exclusive(async () => {
+      const skill = await this.unifiedById(skillId);
+      if (!skill)
+        throw new Failure("SKILL_NOT_FOUND", "Skill 不存在，请刷新列表", 404);
+      const state = await this.repository.read();
+      if (directoryId === null) {
+        delete state.defaultDirectories![skill.unifiedKey];
+        delete state.syncFingerprints![skill.unifiedKey];
+      } else {
+        const directory = (await this.directories()).find(
+          (item) => item.directoryId === directoryId && item.available,
+        );
+        if (!directory)
+          throw new Failure("DIRECTORY_UNAVAILABLE", "默认目录不可用");
+        if (
+          !skill.instances.some(
+            (instance: any) => instance.directoryId === directoryId,
+          )
+        )
+          throw new Failure(
+            "SKILL_NOT_FOUND",
+            "默认目录中不存在这个 Skill",
+            404,
+          );
+        state.defaultDirectories![skill.unifiedKey] = directoryId;
+        state.syncFingerprints![skill.unifiedKey] = Object.fromEntries(
+          skill.instances.map((instance: any) => [
+            instance.directoryId,
+            instance.fingerprint,
+          ]),
+        );
+      }
+      await this.repository.write(state);
+      return { defaultDirectoryId: directoryId };
+    });
+  }
   async locate(id: string) {
-    const record = (await this.scan()).skills.find((s) => s.skillId === id);
+    const scanned = await this.scan();
+    let record = scanned.skills.find((s) => s.skillId === id);
+    if (!record) {
+      const unified = (await this.unifiedSkills()).skills.find(
+        (skill) => skill.skillId === id,
+      );
+      record = unified?.defaultInstance || unified?.instances?.[0];
+    }
     if (!record)
       throw new Failure("SKILL_NOT_FOUND", "Skill 不存在，请刷新列表", 404);
     const directory = (await this.directories()).find(
@@ -207,9 +312,54 @@ export class Manager {
     return { record, file };
   }
   async detail(id: string) {
+    const unified = await this.unifiedById(id);
     const { record, file } = await this.locate(id);
     const content = await fs.readFile(file, "utf8");
-    return { ...record, content, fingerprint: hash(content) };
+    const primary = unified || record;
+    const instances = unified?.instances || [record];
+    const directories = await this.directories();
+    const directoryUsages = await Promise.all(
+      directories.map(async (directory) => {
+        const instance = instances.find(
+          (item: any) => item.directoryId === directory.directoryId,
+        );
+        const skillPath = path.join(
+          directory.path,
+          primary.directoryName || "SKILL.md",
+          primary.directoryName ? "SKILL.md" : "",
+        );
+        let status = instance ? "installed" : "missing";
+        if (!directory.available) status = "unavailable";
+        else if (instance && unified?.defaultDirectoryId) {
+          if (instance.directoryId === unified.defaultDirectoryId)
+            status = "primary";
+          else {
+            const replicaContent = await fs.readFile(
+              path.join(instance.realPath, "SKILL.md"),
+              "utf8",
+            );
+            status =
+              hash(replicaContent) === hash(content) ? "synced" : "conflict";
+          }
+        }
+        return {
+          directoryId: directory.directoryId,
+          path: directory.path,
+          skillPath,
+          status,
+          instance: instance || null,
+        };
+      }),
+    );
+    return {
+      ...primary,
+      content,
+      fingerprint: hash(content),
+      instances,
+      defaultDirectoryId: unified?.defaultDirectoryId,
+      defaultInstance: unified?.defaultInstance || null,
+      directoryUsages,
+    };
   }
   private withDescription(content: string, description: string) {
     const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
@@ -237,7 +387,10 @@ export class Manager {
     return this.exclusive(async () => {
       let file = "";
       try {
-        ({ file } = await this.locate(id));
+        const unified = await this.unifiedById(id);
+        const located = await this.locate(id);
+        file = located.file;
+        const primaryRecord = located.record;
         const current = await fs.readFile(file, "utf8");
         if (!force && hash(current) !== expected)
           throw new Failure(
@@ -254,7 +407,11 @@ export class Manager {
           path: file,
           status: "success",
         });
-        return { fingerprint: hash(content) };
+        const sync =
+          unified?.defaultDirectoryId === primaryRecord.directoryId
+            ? await this.syncCopies(unified, primaryRecord, content)
+            : [];
+        return { fingerprint: hash(content), sync };
       } catch (error: any) {
         await this.recordOperation({
           operation: "update",
@@ -267,6 +424,78 @@ export class Manager {
         throw error;
       }
     });
+  }
+  private async syncCopies(unified: any, primary: any, content: string) {
+    const state = await this.repository.read();
+    const expected: Record<string, string> =
+      state.syncFingerprints?.[unified.unifiedKey] || {};
+    const fingerprints: Record<string, string> = {
+      ...expected,
+      [primary.directoryId]: hash(content),
+    };
+    const results: any[] = [];
+    for (const instance of unified.instances) {
+      if (instance.skillId === primary.skillId) continue;
+      const targetFile = path.join(instance.realPath, "SKILL.md");
+      try {
+        const current = await fs.readFile(targetFile, "utf8");
+        if (
+          (expected[instance.directoryId] &&
+            hash(current) !== expected[instance.directoryId]) ||
+          (!expected[instance.directoryId] && hash(current) !== hash(content))
+        ) {
+          results.push({
+            directoryId: instance.directoryId,
+            path: targetFile,
+            status: "conflict",
+            message: "副本已被外部修改，未覆盖",
+          });
+          await this.recordOperation({
+            operation: "sync",
+            skillId: unified.skillId,
+            directoryId: instance.directoryId,
+            path: targetFile,
+            status: "failed",
+            errorCode: "CONFLICT",
+            message: "副本已被外部修改，未覆盖",
+          });
+          continue;
+        }
+        await atomicWrite(targetFile, content);
+        fingerprints[instance.directoryId] = hash(content);
+        results.push({
+          directoryId: instance.directoryId,
+          path: targetFile,
+          status: "synced",
+        });
+        await this.recordOperation({
+          operation: "sync",
+          skillId: unified.skillId,
+          directoryId: instance.directoryId,
+          path: targetFile,
+          status: "success",
+        });
+      } catch (error: any) {
+        results.push({
+          directoryId: instance.directoryId,
+          path: targetFile,
+          status: "failed",
+          message: error.message,
+        });
+        await this.recordOperation({
+          operation: "sync",
+          skillId: unified.skillId,
+          directoryId: instance.directoryId,
+          path: targetFile,
+          status: "failed",
+          errorCode: error.code || "IO_ERROR",
+          message: error.message,
+        });
+      }
+    }
+    state.syncFingerprints![unified.unifiedKey] = fingerprints;
+    await this.repository.write(state);
+    return results;
   }
   async create(input: {
     targetDirectoryIds: string[];
@@ -391,7 +620,7 @@ export class Manager {
         });
         if (stat) await authorize(directory.path, target);
         items.push({
-          skillId: source.record.skillId,
+          skillId: hash(this.unifiedKey(source.record)),
           targetDirectoryId: directory.directoryId,
           targetPath: target,
           conflict: Boolean(stat),
@@ -459,7 +688,8 @@ export class Manager {
       for (const source of sources) {
         for (const directory of targets) {
           const target = path.join(directory.path, source.record.directoryName);
-          const key = `${source.record.skillId}:${directory.directoryId}`;
+          const unifiedSkillId = hash(this.unifiedKey(source.record));
+          const key = `${unifiedSkillId}:${directory.directoryId}`;
           let status: "success" | "failed" | "skipped" | "cancelled" =
             "success";
           let errorCode: string | undefined;
@@ -506,7 +736,7 @@ export class Manager {
             message = error.message;
           }
           const result = {
-            skillId: source.record.skillId,
+            skillId: unifiedSkillId,
             directoryId: directory.directoryId,
             targetPath: target,
             status,
@@ -515,7 +745,7 @@ export class Manager {
           results.push(result);
           await this.recordOperation({
             operation: "copy",
-            skillId: source.record.skillId,
+            skillId: unifiedSkillId,
             directoryId: directory.directoryId,
             path: target,
             status,
@@ -576,7 +806,7 @@ export class Manager {
             match(source, candidate),
         );
         items.push({
-          sourceSkillId: source.skillId,
+          sourceSkillId: hash(this.unifiedKey(source)),
           targetDirectoryId: directory.directoryId,
           skillName: source.name || source.directoryName,
           targetPath: target?.realPath || null,
@@ -620,7 +850,8 @@ export class Manager {
               match(source, candidate),
           );
           const targetPath = targetSkill?.realPath;
-          const key = `${source.skillId}:${directory.directoryId}`;
+          const unifiedSkillId = hash(this.unifiedKey(source));
+          const key = `${unifiedSkillId}:${directory.directoryId}`;
           let status: "success" | "failed" | "skipped" | "cancelled" =
             "skipped";
           let errorCode: string | undefined;
@@ -660,7 +891,7 @@ export class Manager {
             message = error.message;
           }
           const result = {
-            sourceSkillId: source.skillId,
+            sourceSkillId: unifiedSkillId,
             directoryId: directory.directoryId,
             targetPath:
               targetPath ||
@@ -671,7 +902,7 @@ export class Manager {
           results.push(result);
           await this.recordOperation({
             operation: "sync",
-            skillId: source.skillId,
+            skillId: unifiedSkillId,
             directoryId: directory.directoryId,
             path: result.targetPath,
             status,

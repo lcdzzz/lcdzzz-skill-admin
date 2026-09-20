@@ -674,6 +674,9 @@ function List() {
               </span>
               <h2>{s.name}</h2>
               <p>{s.description || "暂无描述"}</p>
+              <span className={styles.usageCount}>
+                使用于 {s.instances?.length || 1} 个目录
+              </span>
               <code>{s.realPath}</code>
               {s.parseError && (
                 <p className={styles.error}>{s.parseError.message}</p>
@@ -805,6 +808,7 @@ function Detail() {
   const [conflict, setConflict] = useState(false);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [usagePanelOpen, setUsagePanelOpen] = useState(true);
   async function load() {
     try {
       const value = await api(`/skills/${skillId}`);
@@ -835,7 +839,16 @@ function Detail() {
       setDetail({ ...detail, fingerprint: value.fingerprint });
       setConflict(false);
       setError("");
-      setMessage("保存成功");
+      const conflicts = (value.sync || []).filter(
+        (item: any) => item.status === "conflict",
+      ).length;
+      setMessage(
+        conflicts
+          ? `主 Skill 保存成功，${conflicts} 个副本存在冲突`
+          : value.sync?.length
+            ? "保存成功，其他目录已同步"
+            : "保存成功",
+      );
     } catch (e: any) {
       setError(e.message);
       setConflict(e.code === "CONFLICT");
@@ -877,6 +890,92 @@ function Detail() {
             onChange={(event) => setDescription(event.target.value)}
           />
         </label>
+      )}
+      {detail && usagePanelOpen && (
+        <aside className={styles.usagePanel} aria-label="Skill 使用目录">
+          <div className={styles.usagePanelHeader}>
+            <div>
+              <strong>使用目录</strong>
+              <span>{detail.directoryUsages?.length || 0} 个</span>
+            </div>
+            <button
+              className={styles.usageToggle}
+              onClick={() => setUsagePanelOpen(false)}
+            >
+              隐藏
+            </button>
+          </div>
+          {detail.directoryUsages?.map((usage: any) => {
+            const primary = usage.status === "primary";
+            const instance = usage.instance;
+            return (
+              <div className={styles.usageItem} key={usage.directoryId}>
+                <div>
+                  <span
+                    className={
+                      primary || usage.status === "synced"
+                        ? styles.primaryTag
+                        : usage.status === "conflict"
+                          ? styles.conflictTag
+                          : styles.mirrorTag
+                    }
+                  >
+                    {primary
+                      ? "主目录"
+                      : usage.status === "synced"
+                        ? "同步副本"
+                        : usage.status === "conflict"
+                          ? "存在冲突"
+                          : usage.status === "missing"
+                            ? "未安装"
+                            : usage.status === "unavailable"
+                              ? "目录不可用"
+                              : "已安装"}
+                  </span>
+                  <code>{usage.skillPath}</code>
+                </div>
+                {instance && usage.status !== "unavailable" && (
+                  <button
+                    disabled={busy}
+                    onClick={async () => {
+                      setBusy(true);
+                      try {
+                        await api(
+                          `/skills/${skillId}/default-directory`,
+                          "PUT",
+                          {
+                            directoryId: primary ? null : instance.directoryId,
+                          },
+                        );
+                        await load();
+                        setMessage(
+                          primary ? "已取消默认目录" : "已设置为主目录",
+                        );
+                      } catch (e: any) {
+                        setError(e.message);
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    {primary ? "取消主目录" : "设为主目录"}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+          {!detail.defaultDirectoryId && (
+            <small>尚未设置主目录，保存只修改当前实例，不会自动同步。</small>
+          )}
+        </aside>
+      )}
+      {detail && !usagePanelOpen && (
+        <button
+          className={styles.usageExpand}
+          onClick={() => setUsagePanelOpen(true)}
+        >
+          展开使用目录
+        </button>
       )}
       {conflict && (
         <div className={styles.panel}>
