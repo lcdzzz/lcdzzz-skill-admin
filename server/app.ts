@@ -95,6 +95,16 @@ export function createApp(manager: Manager) {
       return manager.setDefaultDirectory(req.params.id, body.directoryId);
     }),
   );
+  app.post(
+    "/api/skills/:id/install",
+    route((req) => {
+      const body = z
+        .object({ directoryId: z.string() })
+        .strict()
+        .parse(req.body);
+      return manager.install(req.params.id, body.directoryId);
+    }),
+  );
   app.get(
     "/api/operations",
     route(async (req) => {

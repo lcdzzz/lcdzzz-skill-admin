@@ -274,7 +274,22 @@ describe("核心闭环", () => {
       fs.stat(path.join(secondRoot, "shared-skill/SKILL.md")),
     ).rejects.toMatchObject({ code: "ENOENT" });
 
-    await fs.mkdir(path.join(secondRoot, "shared-skill"));
+    await fs.writeFile(path.join(root, "shared-skill/helper.txt"), "helper");
+    const installed = await post(`/skills/${skill.skillId}/install`, {
+      directoryId: secondDirectory.directoryId,
+    });
+    expect(installed.status).toBe(200);
+    expect(installed.body.data.status).toBe("installed");
+    expect(
+      await fs.readFile(path.join(secondRoot, "shared-skill/SKILL.md"), "utf8"),
+    ).toContain("new");
+    expect(
+      await fs.readFile(
+        path.join(secondRoot, "shared-skill/helper.txt"),
+        "utf8",
+      ),
+    ).toBe("helper");
+
     await fs.writeFile(
       path.join(secondRoot, "shared-skill/SKILL.md"),
       "---\nname: shared\n---\nexternal\n",

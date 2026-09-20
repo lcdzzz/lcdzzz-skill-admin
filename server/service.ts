@@ -425,6 +425,86 @@ export class Manager {
       }
     });
   }
+  async install(id: string, directoryId: string) {
+    return this.exclusive(async () => {
+      const unified = await this.unifiedById(id);
+      if (!unified)
+        throw new Failure("SKILL_NOT_FOUND", "Skill 不存在，请刷新列表", 404);
+      const source = unified.defaultInstance || unified.instances[0];
+      const directories = await this.directories();
+      const targetDirectory = directories.find(
+        (directory) =>
+          directory.directoryId === directoryId && directory.available,
+      );
+      if (!targetDirectory)
+        throw new Failure("DIRECTORY_UNAVAILABLE", "目标目录不可用");
+      if (source.directoryId === directoryId)
+        throw new Failure(
+          "SKILL_PATH_EXISTS",
+          "目标目录已经安装这个 Skill",
+          409,
+        );
+
+      const sourceFile = path.join(source.realPath, "SKILL.md");
+      const targetPath = source.directoryName
+        ? path.join(targetDirectory.path, source.directoryName)
+        : path.join(targetDirectory.path, "SKILL.md");
+      const existing = await fs.lstat(targetPath).catch((error: any) => {
+        if (error.code === "ENOENT") return undefined;
+        throw error;
+      });
+      if (existing)
+        throw new Failure(
+          "SKILL_PATH_EXISTS",
+          "目标目录已经安装这个 Skill",
+          409,
+        );
+
+      try {
+        if (source.directoryName) {
+          await fs.mkdir(targetPath);
+          await authorize(targetDirectory.path, targetPath);
+          await this.copyDirectoryContents(
+            source.realPath,
+            source.realPath,
+            targetDirectory.path,
+            targetPath,
+          );
+        } else {
+          await authorize(targetDirectory.path, targetDirectory.path);
+          await this.copyFile(sourceFile, targetPath);
+        }
+        const state = await this.repository.read();
+        state.syncFingerprints![unified.unifiedKey] = {
+          ...(state.syncFingerprints![unified.unifiedKey] || {}),
+          [directoryId]: source.fingerprint,
+        };
+        await this.repository.write(state);
+        await this.recordOperation({
+          operation: "copy",
+          skillId: unified.skillId,
+          directoryId,
+          path: targetPath,
+          status: "success",
+          message: "一键安装 Skill",
+        });
+        return { status: "installed", directoryId, targetPath };
+      } catch (error: any) {
+        if (source.directoryName)
+          await fs.rm(targetPath, { recursive: true, force: true });
+        await this.recordOperation({
+          operation: "copy",
+          skillId: unified.skillId,
+          directoryId,
+          path: targetPath,
+          status: "failed",
+          errorCode: error.code || "IO_ERROR",
+          message: error.message,
+        });
+        throw error;
+      }
+    });
+  }
   private async syncCopies(unified: any, primary: any, content: string) {
     const state = await this.repository.read();
     const expected: Record<string, string> =

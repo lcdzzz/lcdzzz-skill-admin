@@ -961,6 +961,28 @@ function Detail() {
                     {primary ? "取消主目录" : "设为主目录"}
                   </button>
                 )}
+                {usage.status === "missing" && (
+                  <button
+                    disabled={busy}
+                    onClick={async () => {
+                      setBusy(true);
+                      setError("");
+                      try {
+                        await api(`/skills/${skillId}/install`, "POST", {
+                          directoryId: usage.directoryId,
+                        });
+                        await load();
+                        setMessage("已安装到该目录");
+                      } catch (e: any) {
+                        setError(e.message);
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    一键安装
+                  </button>
+                )}
               </div>
             );
           })}
