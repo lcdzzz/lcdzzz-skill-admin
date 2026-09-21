@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Skill Manager · Terminal</title>
+    <style>
+      :root {
+        --bg: #07100f;
+        --panel: #0c1917;
+        --line: #1c3932;
+        --text: #dbf9ec;
+        --muted: #76958a;
+        --green: #65f2b0;
+        --amber: #ffd27a;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 80% 0, #12402d55, transparent 32%),
+          var(--bg);
+        color: var(--text);
+        font:
+          13px/1.6 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+      }
+      .shell {
+        max-width: 1280px;
+        margin: auto;
+        padding: 30px;
+      }
+      .top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-bottom: 22px;
+        border-bottom: 1px solid var(--line);
+      }
+      .logo {
+        font-weight: 800;
+        letter-spacing: 0.04em;
+      }
+      .logo span {
+        color: var(--green);
+      }
+      .online {
+        color: var(--green);
+        font-size: 12px;
+      }
+      .online:before {
+        content: "●";
+        margin-right: 8px;
+      }
+      .body {
+        display: grid;
+        grid-template-columns: 1fr 300px;
+        gap: 18px;
+        margin-top: 18px;
+      }
+      .main,
+      .side {
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: #0a1715cc;
+      }
+      .main {
+        padding: 23px;
+      }
+      .side {
+        padding: 18px;
+        height: max-content;
+      }
+      .prompt {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .prompt b {
+        color: var(--green);
+      }
+      h1 {
+        margin: 7px 0 22px;
+        font-size: 28px;
+        letter-spacing: -0.08em;
+      }
+      .summary {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        margin-bottom: 23px;
+      }
+      .stat {
+        padding: 13px;
+        border: 1px solid var(--line);
+        background: var(--panel);
+      }
+      .stat strong {
+        display: block;
+        color: var(--green);
+        font-size: 23px;
+      }
+      .stat span {
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .command {
+        display: flex;
+        gap: 9px;
+        margin-bottom: 22px;
+      }
+      .command input {
+        flex: 1;
+        border: 1px solid var(--line);
+        border-radius: 5px;
+        padding: 10px 12px;
+        outline: 0;
+        background: #06110f;
+        color: var(--text);
+        font: inherit;
+      }
+      .command input:focus {
+        border-color: var(--green);
+      }
+      button {
+        border: 1px solid var(--line);
+        border-radius: 5px;
+        padding: 9px 13px;
+        background: #10251f;
+        color: var(--text);
+        font: inherit;
+      }
+      .primary {
+        border-color: var(--green);
+        color: #052319;
+        background: var(--green);
+        font-weight: 800;
+      }
+      .line {
+        display: grid;
+        grid-template-columns: 34px 1.5fr 1fr 90px;
+        gap: 12px;
+        align-items: center;
+        padding: 14px 0;
+        border-top: 1px dashed var(--line);
+      }
+      .line:first-child {
+        border: 0;
+      }
+      .num {
+        color: var(--muted);
+      }
+      .name {
+        font-weight: 700;
+      }
+      .path {
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .state {
+        color: var(--green);
+        font-size: 11px;
+      }
+      .state.warn {
+        color: var(--amber);
+      }
+      .side h2 {
+        margin: 0 0 16px;
+        font-size: 14px;
+      }
+      .log {
+        padding: 12px 0;
+        border-top: 1px dashed var(--line);
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .log b {
+        color: var(--text);
+        font-weight: 500;
+      }
+      .log time {
+        display: block;
+        color: #4f7469;
+        font-size: 10px;
+      }
+      .hint {
+        margin-top: 26px;
+        padding: 12px;
+        border: 1px solid #846b2d66;
+        color: var(--amber);
+        background: #846b2d12;
+        font-size: 11px;
+      }
+      @media (max-width: 800px) {
+        .shell {
+          padding: 16px;
+        }
+        .body {
+          grid-template-columns: 1fr;
+        }
+        .side {
+          order: -1;
+        }
+        .summary {
+          grid-template-columns: 1fr 1fr;
+        }
+        .line {
+          grid-template-columns: 28px 1fr 78px;
+        }
+        .path {
+          display: none;
+        }
+        .command {
+          flex-wrap: wrap;
+        }
+        .command input {
+          flex-basis: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="top">
+        <div class="logo"><span>▣</span> SKILL_OPERATOR / LOCAL</div>
+        <div class="online">SYSTEM READY · 09:42:18</div>
+      </header>
+      <div class="body">
+        <section class="main">
+          <div class="prompt">
+            operator@workbench:~$ <b>skill list --all</b>
+          </div>
+          <h1>Skill Registry</h1>
+          <section class="summary">
+            <div class="stat">
+              <strong>24</strong><span>REGISTERED SKILLS</span>
+            </div>
+            <div class="stat">
+              <strong>03</strong><span>CONNECTED ROOTS</span>
+            </div>
+            <div class="stat">
+              <strong>02</strong><span>PENDING ACTIONS</span>
+            </div>
+          </section>
+          <div class="command">
+            <input
+              aria-label="搜索 Skill"
+              placeholder="search --query …"
+            /><button type="button">执行</button
+            ><button class="primary" type="button">+ CREATE</button>
+          </div>
+          <div class="line">
+            <span class="num">01</span><span class="name">基础能力</span
+            ><span class="path">~/.codex/skills</span
+            ><span class="state">[ synced ]</span>
+          </div>
+          <div class="line">
+            <span class="num">02</span><span class="name">API 文档生成</span
+            ><span class="path">~/team/skills</span
+            ><span class="state">[ synced ]</span>
+          </div>
+          <div class="line">
+            <span class="num">03</span><span class="name">支付链路排查</span
+            ><span class="path">~/team/skills</span
+            ><span class="state warn">[ pending ]</span>
+          </div>
+          <div class="line">
+            <span class="num">04</span><span class="name">MySQL 只读查询</span
+            ><span class="path">~/.codex/skills</span
+            ><span class="state">[ synced ]</span>
+          </div>
+        </section>
+        <aside class="side">
+          <h2>EVENT STREAM</h2>
+          <div class="log">
+            <b>sync completed</b> · 基础能力<time>just now</time>
+          </div>
+          <div class="log">
+            <b>skill updated</b> · API 文档生成<time>12 min ago</time>
+          </div>
+          <div class="log">
+            <b>directory scanned</b> · ~/team/skills<time>1 hour ago</time>
+          </div>
+          <div class="hint">TIP<br />用同步中心处理跨目录中的同名 Skill。</div>
+        </aside>
+      </div>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Skill Manager · Pixel</title>
+    <style>
+      :root {
+        --bg: #19162a;
+        --panel: #25203b;
+        --line: #51426e;
+        --txt: #fff4d6;
+        --muted: #ada0c7;
+        --pink: #ff7aa8;
+        --yellow: #ffe26a;
+        --blue: #8ab7ff;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: linear-gradient(135deg, #19162a, #121d38);
+        color: var(--txt);
+        font:
+          14px/1.55 "Courier New",
+          monospace;
+      }
+      .shell {
+        max-width: 1120px;
+        margin: auto;
+        padding: 27px;
+      }
+      .top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 14px 16px;
+        border: 3px solid var(--line);
+        box-shadow: 7px 7px 0 #0d0b17;
+        background: var(--panel);
+      }
+      .brand {
+        font-weight: 800;
+        letter-spacing: 0.03em;
+      }
+      .brand b {
+        color: var(--pink);
+      }
+      .coin {
+        padding: 3px 7px;
+        color: #302235;
+        background: var(--yellow);
+        font-size: 11px;
+      }
+      .hero {
+        padding: 54px 8px 35px;
+      }
+      .eyebrow {
+        margin: 0 0 9px;
+        color: var(--yellow);
+        font-size: 11px;
+      }
+      .hero h1 {
+        margin: 0;
+        font-size: clamp(32px, 5vw, 58px);
+        line-height: 1;
+        letter-spacing: -0.08em;
+      }
+      .hero h1 span {
+        color: var(--pink);
+      }
+      .hero p {
+        max-width: 560px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .toolbar {
+        display: flex;
+        gap: 9px;
+        padding: 12px;
+        border: 3px solid var(--line);
+        background: var(--panel);
+        box-shadow: 5px 5px 0 #0d0b17;
+      }
+      .toolbar input {
+        flex: 1;
+        min-width: 0;
+        border: 0;
+        border-bottom: 2px solid var(--blue);
+        outline: 0;
+        padding: 9px;
+        background: transparent;
+        color: var(--txt);
+        font: inherit;
+      }
+      .toolbar button {
+        border: 2px solid var(--blue);
+        padding: 9px 13px;
+        background: #312852;
+        color: var(--txt);
+        font: inherit;
+      }
+      .toolbar .primary {
+        border-color: var(--yellow);
+        color: #302235;
+        background: var(--yellow);
+        font-weight: 800;
+      }
+      .heading {
+        display: flex;
+        justify-content: space-between;
+        margin: 40px 0 12px;
+      }
+      .heading h2 {
+        margin: 0;
+        font-size: 15px;
+      }
+      .heading span {
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+      }
+      .card {
+        min-height: 230px;
+        padding: 17px;
+        border: 3px solid var(--line);
+        background: var(--panel);
+        box-shadow: 5px 5px 0 #0d0b17;
+        transition: 0.16s;
+      }
+      .card:hover {
+        border-color: var(--pink);
+        transform: translate(-2px, -2px);
+      }
+      .sprite {
+        color: var(--yellow);
+        font-size: 25px;
+      }
+      .card h3 {
+        margin: 27px 0 8px;
+        font-size: 18px;
+      }
+      .card p {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .foot {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 28px;
+        color: var(--muted);
+        font-size: 10px;
+      }
+      .ok {
+        color: var(--yellow);
+      }
+      @media (max-width: 720px) {
+        .shell {
+          padding: 16px;
+        }
+        .grid {
+          grid-template-columns: 1fr;
+        }
+        .toolbar {
+          flex-wrap: wrap;
+        }
+        .toolbar input {
+          flex-basis: 100%;
+        }
+        .top {
+          font-size: 12px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="top">
+        <div class="brand"><b>◆</b> SKILL QUEST / v0.3</div>
+        <div class="coin">● ONLINE</div>
+      </header>
+      <section class="hero">
+        <p class="eyebrow">PLAYER 01 · LOCAL WORKBENCH</p>
+        <h1>升级你的<br /><span>技能背包。</span></h1>
+        <p>每个 Skill 都是一件工具。收集、整理、同步，然后继续探索下一关。</p>
+      </section>
+      <section class="toolbar">
+        <input
+          aria-label="搜索 Skill"
+          placeholder="输入关键词开始搜索…"
+        /><button type="button">筛选</button
+        ><button class="primary" type="button">+ 新建 Skill</button>
+      </section>
+      <div class="heading">
+        <h2>▸ SKILL INVENTORY</h2>
+        <span>24 / 99 SLOTS USED</span>
+      </div>
+      <section class="grid">
+        <article class="card">
+          <div class="sprite">✦ ✦ ✦</div>
+          <h3>基础能力</h3>
+          <p>通用工作流与稳定的日常装备。</p>
+          <div class="foot">
+            <span>LV. 08 · CORE</span><span class="ok">READY</span>
+          </div>
+        </article>
+        <article class="card">
+          <div class="sprite">◈ ◈ ◈</div>
+          <h3>接口文档</h3>
+          <p>把代码变成可阅读的任务说明。</p>
+          <div class="foot">
+            <span>LV. 05 · WRITE</span><span class="ok">READY</span>
+          </div>
+        </article>
+        <article class="card">
+          <div class="sprite">▣ ▣ ▣</div>
+          <h3>系统排查</h3>
+          <p>沿着证据链，找到隐藏的故障点。</p>
+          <div class="foot">
+            <span>LV. 03 · DEBUG</span
+            ><span style="color: var(--pink)">SYNC NOW</span>
+          </div>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

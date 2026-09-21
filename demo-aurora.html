@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Skill Manager · 极光玻璃方案</title>
+    <style>
+      :root {
+        --bg: #0b0720;
+        --ink: #f6f1ff;
+        --muted: #bbb1d2;
+        --glass: #ffffff12;
+        --line: #ffffff24;
+        --pink: #ff8fcf;
+        --blue: #82b6ff;
+        --mint: #85f8d0;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        min-height: 100vh;
+        margin: 0;
+        overflow-x: hidden;
+        color: var(--ink);
+        background: #0b0720;
+        font:
+          14px/1.55 Inter,
+          system-ui,
+          sans-serif;
+      }
+      body:before,
+      body:after {
+        position: fixed;
+        z-index: -1;
+        width: 500px;
+        height: 500px;
+        border-radius: 50%;
+        filter: blur(90px);
+        content: "";
+      }
+      body:before {
+        top: -190px;
+        left: -80px;
+        background: #6e44ff8c;
+      }
+      body:after {
+        right: -120px;
+        bottom: -220px;
+        background: #ff4aac75;
+      }
+      .shell {
+        width: min(1160px, calc(100% - 46px));
+        margin: auto;
+        padding: 28px 0 76px;
+      }
+      .nav {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 13px 17px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: var(--glass);
+        backdrop-filter: blur(22px);
+      }
+      .brand {
+        font-weight: 800;
+      }
+      .brand span {
+        margin-right: 8px;
+        color: var(--pink);
+        font-size: 19px;
+      }
+      .links {
+        display: flex;
+        gap: 20px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .links b {
+        color: white;
+      }
+      .intro {
+        display: grid;
+        grid-template-columns: 1.25fr 0.75fr;
+        gap: 28px;
+        align-items: center;
+        padding: 72px 20px 44px;
+      }
+      .caps {
+        margin: 0 0 12px;
+        color: var(--mint);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+      h1 {
+        margin: 0;
+        max-width: 700px;
+        font-size: clamp(42px, 6vw, 68px);
+        line-height: 1;
+        letter-spacing: -0.07em;
+      }
+      h1 em {
+        color: var(--pink);
+        font-style: normal;
+      }
+      .intro p:not(.caps) {
+        max-width: 570px;
+        color: var(--muted);
+        font-size: 16px;
+      }
+      .orb {
+        display: grid;
+        place-items: center;
+        aspect-ratio: 1;
+        border: 1px solid var(--line);
+        border-radius: 50%;
+        background: radial-gradient(circle, #ffffff26, transparent 59%);
+        box-shadow:
+          inset 0 0 50px #fff1,
+          0 0 85px #7857ef42;
+      }
+      .orb div {
+        display: grid;
+        place-items: center;
+        width: 57%;
+        aspect-ratio: 1;
+        border: 1px solid #ffffff50;
+        border-radius: 50%;
+        color: var(--mint);
+        font-size: 24px;
+        box-shadow: 0 0 42px #85f8d065;
+      }
+      .tools {
+        display: flex;
+        gap: 10px;
+        padding: 11px;
+        border: 1px solid var(--line);
+        border-radius: 15px;
+        background: var(--glass);
+        backdrop-filter: blur(18px);
+      }
+      input {
+        flex: 1;
+        min-width: 0;
+        border: 0;
+        outline: 0;
+        color: white;
+        background: transparent;
+        padding: 10px;
+        font: inherit;
+      }
+      input::placeholder {
+        color: #b9afd0;
+      }
+      button {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 10px 14px;
+        background: #ffffff10;
+        color: white;
+        font: inherit;
+      }
+      .primary {
+        border: 0;
+        background: linear-gradient(110deg, var(--pink), #a685ff);
+        font-weight: 800;
+      }
+      .section {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin: 34px 0 14px;
+      }
+      .section h2 {
+        margin: 0;
+        font-size: 16px;
+      }
+      .section span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+      }
+      .card {
+        position: relative;
+        min-height: 200px;
+        overflow: hidden;
+        padding: 22px;
+        border: 1px solid var(--line);
+        border-radius: 19px;
+        background: linear-gradient(145deg, #ffffff1b, #ffffff08);
+        backdrop-filter: blur(18px);
+        transition: 0.2s;
+      }
+      .card:hover {
+        transform: translateY(-4px);
+        border-color: #fff8;
+      }
+      .num {
+        color: var(--blue);
+        font-size: 12px;
+        font-weight: 800;
+      }
+      .card h3 {
+        margin: 33px 0 7px;
+        font-size: 20px;
+      }
+      .card p {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .state {
+        position: absolute;
+        right: 17px;
+        bottom: 15px;
+        color: var(--mint);
+        font-size: 11px;
+      }
+      .state:before {
+        content: "✦";
+        margin-right: 5px;
+      }
+      .footer {
+        margin-top: 42px;
+        color: var(--muted);
+        font-size: 11px;
+        text-align: center;
+      }
+      @media (max-width: 720px) {
+        .shell {
+          width: min(100% - 28px, 560px);
+          padding-top: 15px;
+        }
+        .links {
+          display: none;
+        }
+        .intro {
+          grid-template-columns: 1fr;
+          padding: 50px 5px 28px;
+        }
+        .orb {
+          display: none;
+        }
+        .tools {
+          flex-wrap: wrap;
+        }
+        .tools input {
+          flex-basis: 100%;
+        }
+        .cards {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <nav class="nav">
+        <div class="brand"><span>✦</span>Skill Atelier</div>
+        <div class="links">
+          <b>概览</b><span>目录</span><span>同步</span><span>记录</span>
+        </div>
+        <button type="button">本地在线</button>
+      </nav>
+      <section class="intro">
+        <div>
+          <p class="caps">Your local intelligence space</p>
+          <h1>让灵感与规则，<em>共同发光。</em></h1>
+          <p>
+            为你的工作方式建立一个轻盈而有生命力的技能空间。每个
+            Skill，都值得清晰地被看见。
+          </p>
+        </div>
+        <div class="orb"><div>✦</div></div>
+      </section>
+      <section class="tools">
+        <input aria-label="搜索 Skill" placeholder="发现一个 Skill…" /><button
+          type="button"
+        >
+          所有目录⌄</button
+        ><button class="primary" type="button">创建新 Skill</button>
+      </section>
+      <div class="section">
+        <h2>正在生长的能力</h2>
+        <span>24 个 Skill</span>
+      </div>
+      <section class="cards">
+        <article class="card">
+          <span class="num">01 / FOUNDATION</span>
+          <h3>基础能力</h3>
+          <p>让通用流程有据可循，也让协作自然发生。</p>
+          <span class="state">同步完成</span>
+        </article>
+        <article class="card">
+          <span class="num">02 / DOCUMENTATION</span>
+          <h3>接口叙事</h3>
+          <p>从代码里抽取清晰表达，形成可复用的说明。</p>
+          <span class="state">同步完成</span>
+        </article>
+        <article class="card">
+          <span class="num">03 / DIAGNOSIS</span>
+          <h3>证据链路</h3>
+          <p>沿着真实调用路径，找到每一个问题的根。</p>
+          <span class="state">刚刚更新</span>
+        </article>
+      </section>
+      <p class="footer">LOCAL FIRST · YOUR SKILLS, YOUR SPACE</p>
+    </main>
+  </body>
+</html>

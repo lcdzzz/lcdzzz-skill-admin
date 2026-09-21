@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Skill Manager · Editorial</title>
+    <style>
+      :root {
+        --ink: #25231f;
+        --muted: #827d73;
+        --paper: #f5f0e7;
+        --card: #fffdf8;
+        --red: #d6533c;
+        --line: #ddd4c7;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font:
+          14px/1.6 Georgia,
+          "Songti SC",
+          serif;
+      }
+      .shell {
+        max-width: 1160px;
+        margin: auto;
+        padding: 28px 28px 70px;
+      }
+      .nav {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-bottom: 18px;
+        border-bottom: 1px solid var(--ink);
+      }
+      .brand {
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: -0.04em;
+      }
+      .brand em {
+        color: var(--red);
+        font-style: normal;
+      }
+      .links {
+        display: flex;
+        gap: 23px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .links b {
+        color: var(--ink);
+      }
+      .hero {
+        display: grid;
+        grid-template-columns: 1fr 280px;
+        gap: 30px;
+        padding: 75px 0 52px;
+        border-bottom: 1px solid var(--line);
+      }
+      .kicker {
+        margin: 0 0 14px;
+        color: var(--red);
+        font:
+          700 11px/1 ui-sans-serif,
+          sans-serif;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+      h1 {
+        max-width: 700px;
+        margin: 0;
+        font-size: clamp(42px, 6vw, 76px);
+        line-height: 0.98;
+        letter-spacing: -0.08em;
+        font-weight: 500;
+      }
+      .hero p:not(.kicker) {
+        max-width: 520px;
+        margin: 22px 0 0;
+        color: var(--muted);
+        font-size: 16px;
+      }
+      .note {
+        align-self: end;
+        padding: 18px;
+        border-top: 3px solid var(--red);
+        background: #fff8;
+      }
+      .note strong {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 24px;
+      }
+      .note span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .toolbar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 25px 0 10px;
+      }
+      .toolbar input {
+        flex: 1;
+        padding: 10px 0;
+        border: 0;
+        border-bottom: 1px solid var(--ink);
+        outline: 0;
+        background: transparent;
+        color: var(--ink);
+        font: inherit;
+      }
+      .toolbar button {
+        border: 1px solid var(--ink);
+        border-radius: 0;
+        padding: 9px 15px;
+        background: transparent;
+        color: var(--ink);
+        font: inherit;
+      }
+      .toolbar .primary {
+        border-color: var(--red);
+        background: var(--red);
+        color: white;
+      }
+      .heading {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        margin: 42px 0 16px;
+      }
+      .heading h2 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 500;
+      }
+      .heading span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 13px;
+      }
+      .card {
+        min-height: 215px;
+        padding: 19px;
+        border: 1px solid var(--line);
+        background: var(--card);
+        transition: 0.18s;
+      }
+      .card:hover {
+        transform: translateY(-3px);
+        box-shadow: 7px 7px 0 #25231f;
+      }
+      .card .index {
+        color: var(--red);
+        font:
+          700 11px ui-sans-serif,
+          sans-serif;
+      }
+      .card h3 {
+        margin: 46px 0 8px;
+        font-size: 21px;
+        font-weight: 500;
+      }
+      .card p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .foot {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 30px;
+        color: var(--muted);
+        font:
+          11px ui-sans-serif,
+          sans-serif;
+      }
+      .status {
+        color: #338763;
+      }
+      @media (max-width: 730px) {
+        .shell {
+          padding: 18px 16px;
+        }
+        .links {
+          display: none;
+        }
+        .hero {
+          display: block;
+          padding: 48px 0 32px;
+        }
+        .note {
+          margin-top: 30px;
+        }
+        .grid {
+          grid-template-columns: 1fr;
+        }
+        .toolbar {
+          flex-wrap: wrap;
+        }
+        .toolbar input {
+          flex-basis: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <nav class="nav">
+        <div class="brand"><em>✳</em> Skill / Journal</div>
+        <div class="links">
+          <b>总览</b><span>技能册</span><span>目录</span><span>更新志</span>
+        </div>
+      </nav>
+      <section class="hero">
+        <div>
+          <p class="kicker">A quiet system for useful things</p>
+          <h1>把复杂的维护，<br />写成一页清晰。</h1>
+          <p>
+            这是一个偏编辑部气质的 Skill
+            工作台：少一点噪声，多一点秩序，让每个能力模块都有自己的位置。
+          </p>
+        </div>
+        <div class="note">
+          <strong>24</strong><span>已整理的 Skill<br />覆盖 3 个本地目录</span>
+        </div>
+      </section>
+      <section class="toolbar">
+        <input aria-label="搜索 Skill" placeholder="搜索一个 Skill…" /><button
+          type="button"
+        >
+          筛选</button
+        ><button class="primary" type="button">新建 Skill</button>
+      </section>
+      <div class="heading">
+        <h2>最近整理</h2>
+        <span>2026 / 09 / 21</span>
+      </div>
+      <section class="grid">
+        <article class="card">
+          <span class="index">NO. 01 · FOUNDATION</span>
+          <h3>基础能力</h3>
+          <p>把常用工作流，整理成可靠的日常。</p>
+          <div class="foot">
+            <span>个人目录</span><span class="status">已同步</span>
+          </div>
+        </article>
+        <article class="card">
+          <span class="index">NO. 02 · WRITING</span>
+          <h3>接口文档生成</h3>
+          <p>让实现细节，拥有一份清楚的说明。</p>
+          <div class="foot">
+            <span>团队目录</span><span class="status">已同步</span>
+          </div>
+        </article>
+        <article class="card">
+          <span class="index">NO. 03 · DEBUG</span>
+          <h3>系统排查</h3>
+          <p>从现象开始，沿着证据找到答案。</p>
+          <div class="foot">
+            <span>团队目录</span><span class="status">待同步</span>
+          </div>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Skill Manager · 数据控制台方案</title>
+    <style>
+      :root {
+        --bg: #080c14;
+        --side: #0e1420;
+        --panel: #121a27;
+        --line: #243247;
+        --txt: #e6edf7;
+        --muted: #8190a4;
+        --cyan: #3ee8d5;
+        --violet: #8b7cff;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--txt);
+        font:
+          13px/1.5 ui-sans-serif,
+          system-ui,
+          sans-serif;
+      }
+      .layout {
+        display: grid;
+        grid-template-columns: 220px 1fr;
+        min-height: 100vh;
+      }
+      .side {
+        padding: 24px 14px;
+        border-right: 1px solid var(--line);
+        background: var(--side);
+      }
+      .logo {
+        margin: 0 10px 32px;
+        font-size: 15px;
+        font-weight: 800;
+      }
+      .logo b {
+        color: var(--cyan);
+      }
+      .nav {
+        display: grid;
+        gap: 5px;
+      }
+      .nav a {
+        padding: 10px 12px;
+        border-radius: 8px;
+        color: var(--muted);
+        text-decoration: none;
+      }
+      .nav a.active,
+      .nav a:hover {
+        background: #1a2637;
+        color: var(--txt);
+      }
+      .nav .n {
+        float: right;
+        color: var(--cyan);
+        font-size: 11px;
+      }
+      .bottom {
+        position: fixed;
+        bottom: 20px;
+        color: var(--muted);
+        padding: 0 12px;
+        font-size: 11px;
+      }
+      .workspace {
+        padding: 28px 34px;
+      }
+      .top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 26px;
+      }
+      .crumb {
+        color: var(--muted);
+      }
+      .health {
+        color: var(--cyan);
+        font-size: 12px;
+      }
+      .health:before {
+        content: "●";
+        margin-right: 7px;
+        text-shadow: 0 0 12px var(--cyan);
+      }
+      h1 {
+        margin: 0;
+        font-size: 26px;
+        letter-spacing: -0.04em;
+      }
+      .sub {
+        margin: 7px 0 24px;
+        color: var(--muted);
+      }
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+      }
+      .metric {
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: linear-gradient(135deg, #131c2b, #0f1622);
+      }
+      .metric small {
+        color: var(--muted);
+      }
+      .metric strong {
+        display: block;
+        margin: 5px 0 2px;
+        font-size: 23px;
+      }
+      .up {
+        color: var(--cyan);
+        font-size: 11px;
+      }
+      .toolbar {
+        display: flex;
+        gap: 10px;
+        margin: 25px 0 12px;
+      }
+      .toolbar input {
+        flex: 1;
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #0d1420;
+        color: var(--txt);
+        outline: none;
+      }
+      .toolbar input:focus {
+        border-color: var(--cyan);
+        box-shadow: 0 0 0 3px #3ee8d51a;
+      }
+      button {
+        padding: 9px 13px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #172234;
+        color: var(--txt);
+        font: inherit;
+      }
+      .primary {
+        border: 0;
+        background: var(--cyan);
+        color: #06201e;
+        font-weight: 800;
+      }
+      .table {
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--panel);
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 2fr 1.4fr 1fr 1fr 92px;
+        gap: 12px;
+        align-items: center;
+        padding: 14px 17px;
+        border-top: 1px solid var(--line);
+      }
+      .row:first-child {
+        border: 0;
+      }
+      .head {
+        padding: 11px 17px;
+        color: var(--muted);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        background: #101824;
+      }
+      .name {
+        font-weight: 700;
+      }
+      .path {
+        color: var(--muted);
+        font-family: ui-monospace, monospace;
+        font-size: 11px;
+      }
+      .tag {
+        width: max-content;
+        padding: 3px 7px;
+        border-radius: 4px;
+        background: #12302f;
+        color: var(--cyan);
+        font-size: 11px;
+      }
+      .tag.warn {
+        background: #2c263d;
+        color: #b8acff;
+      }
+      @media (max-width: 760px) {
+        .layout {
+          display: block;
+        }
+        .side {
+          display: none;
+        }
+        .workspace {
+          padding: 20px 15px;
+        }
+        .metrics {
+          grid-template-columns: 1fr 1fr;
+        }
+        .row {
+          grid-template-columns: 1.5fr 1fr;
+        }
+        .row > *:nth-child(3),
+        .row > *:nth-child(4) {
+          display: none;
+        }
+        .toolbar {
+          flex-wrap: wrap;
+        }
+        .toolbar input {
+          flex-basis: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="layout">
+      <aside class="side">
+        <p class="logo"><b>◆</b> SKILL OPS</p>
+        <nav class="nav">
+          <a class="active" href="#">概览 <span class="n">24</span></a
+          ><a href="#">Skill 库</a><a href="#">目录管理</a
+          ><a href="#">同步中心</a><a href="#">操作记录</a>
+        </nav>
+        <div class="bottom">LOCAL CONSOLE · V0.3</div>
+      </aside>
+      <main class="workspace">
+        <header class="top">
+          <span class="crumb">工作台 / Skill 库</span
+          ><span class="health">系统在线</span>
+        </header>
+        <h1>Skill 控制台</h1>
+        <p class="sub">实时查看目录状态与维护操作，一切都在一个视图内完成。</p>
+        <section class="metrics">
+          <div class="metric">
+            <small>已管理 Skill</small><strong>24</strong
+            ><span class="up">+ 3 本周新增</span>
+          </div>
+          <div class="metric">
+            <small>已连接目录</small><strong>03</strong
+            ><span class="up">全部可用</span>
+          </div>
+          <div class="metric">
+            <small>待处理同步</small><strong>02</strong
+            ><span class="up">可立即处理</span>
+          </div>
+          <div class="metric">
+            <small>本月操作</small><strong>186</strong
+            ><span class="up">↑ 12.4%</span>
+          </div>
+        </section>
+        <section class="toolbar">
+          <input
+            aria-label="搜索 Skill"
+            placeholder="搜索名称、路径或描述…"
+          /><button type="button">筛选⌄</button
+          ><button class="primary" type="button">＋ 新建 Skill</button>
+        </section>
+        <section class="table">
+          <div class="row head">
+            <span>Skill</span><span>所在目录</span><span>状态</span
+            ><span>最后修改</span><span>操作</span>
+          </div>
+          <div class="row">
+            <span class="name">基础能力</span
+            ><span class="path">~/.codex/skills</span
+            ><span class="tag">已同步</span><span>10 分钟前</span
+            ><button type="button">查看</button>
+          </div>
+          <div class="row">
+            <span class="name">API 文档生成</span
+            ><span class="path">~/team/skills</span
+            ><span class="tag">已同步</span><span>昨天</span
+            ><button type="button">查看</button>
+          </div>
+          <div class="row">
+            <span class="name">支付链路排查</span
+            ><span class="path">~/team/skills</span
+            ><span class="tag warn">待同步</span><span>3 天前</span
+            ><button type="button">同步</button>
+          </div>
+          <div class="row">
+            <span class="name">MySQL 只读查询</span
+            ><span class="path">~/.codex/skills</span
+            ><span class="tag">已同步</span><span>上周</span
+            ><button type="button">查看</button>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
