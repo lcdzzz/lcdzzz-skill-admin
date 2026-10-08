@@ -2,6 +2,7 @@ import * as fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import YAML from "yaml";
+import { makeExportZip, prepareExport } from "./export.js";
 import {
   Repository,
   Failure,
@@ -250,6 +251,46 @@ export class Manager {
     return (await this.unifiedSkills()).skills.find(
       (skill) => skill.skillId === id,
     );
+  }
+  private async selectedExport(skillIds: string[]) {
+    const skills = (await this.unifiedSkills()).skills;
+    const directories = await this.directories();
+    const sources = skillIds.map((id) => {
+      const skill = skills.find((item) => item.skillId === id);
+      if (!skill)
+        throw new Failure("SKILL_NOT_FOUND", "Skill 不存在，请刷新列表", 404);
+      const directory = directories.find(
+        (item) => item.directoryId === skill.directoryId && item.available,
+      );
+      if (!directory)
+        throw new Failure("DIRECTORY_UNAVAILABLE", "Skill 来源目录不可用");
+      return {
+        name: skill.name,
+        directoryName: skill.directoryName,
+        realPath: skill.realPath,
+        rootPath: directory.path,
+      };
+    });
+    return prepareExport(sources);
+  }
+  async exportPreview(skillIds: string[]) {
+    const prepared = await this.selectedExport(skillIds);
+    return {
+      files: prepared.files.map((file) => ({
+        path: file.path,
+        size: file.data.byteLength,
+      })),
+      excluded: prepared.omitted,
+      fingerprint: prepared.fingerprint,
+      totalBytes: prepared.totalBytes,
+      skillCount: prepared.skillCount,
+    };
+  }
+  async exportZip(skillIds: string[], expectedFingerprint: string) {
+    const prepared = await this.selectedExport(skillIds);
+    if (prepared.fingerprint !== expectedFingerprint)
+      throw new Failure("CONFLICT", "Skill 文件已改变，请重新预览后导出", 409);
+    return makeExportZip(prepared);
   }
   async setDefaultDirectory(skillId: string, directoryId: string | null) {
     return this.exclusive(async () => {

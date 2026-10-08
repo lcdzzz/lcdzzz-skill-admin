@@ -1,4 +1,12 @@
-import { chmod, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  cp,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 
@@ -20,6 +28,23 @@ for (const name of [
     recursive: true,
   });
 }
+
+// Production packages run with node directly; pnpm's .bin links may point to
+// the CI workspace and must not be shipped in a portable archive.
+await rm(path.join(output, "node_modules", ".bin"), {
+  recursive: true,
+  force: true,
+});
+
+async function assertNoSymlinks(directory) {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isSymbolicLink())
+      throw new Error(`Release contains a symlink: ${entryPath}`);
+    if (entry.isDirectory()) await assertNoSymlinks(entryPath);
+  }
+}
+await assertNoSymlinks(output);
 
 const packagePath = path.join(output, "package.json");
 const packageJson = JSON.parse(await readFile(packagePath, "utf8"));

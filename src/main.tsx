@@ -45,6 +45,8 @@ function List() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportPreview, setExportPreview] = useState<any>(null);
   const [copyOpen, setCopyOpen] = useState(false);
   const [copyTargets, setCopyTargets] = useState<string[]>([]);
   const [copyMode, setCopyMode] = useState("skill_md_only");
@@ -64,6 +66,7 @@ function List() {
   async function refresh(nextDirectoryFilter = directoryFilter) {
     setBusy(true);
     setError("");
+    setExportPreview(null);
     try {
       const directoryParam = nextDirectoryFilter
         ? `&directoryId=${encodeURIComponent(nextDirectoryFilter)}`
@@ -91,6 +94,53 @@ function List() {
   const selectedSourceDirectories = new Set(
     selectedSkills.map((skill: any) => skill.directoryId),
   );
+  async function previewExport() {
+    setBusy(true);
+    setError("");
+    try {
+      setExportPreview(
+        await api("/skills/export/preview", "POST", {
+          skillIds: selectedSkills.map((skill: any) => skill.skillId),
+        }),
+      );
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function downloadExport() {
+    if (!exportPreview) return;
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/skills/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          skillIds: selectedSkills.map((skill: any) => skill.skillId),
+          expectedFingerprint: exportPreview.fingerprint,
+        }),
+      });
+      if (!response.ok) {
+        const value = await response.json();
+        throw new Error(value.error?.message || "导出失败");
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "skills-share.zip";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e: any) {
+      setError(e.message);
+      setExportPreview(null);
+    } finally {
+      setBusy(false);
+    }
+  }
   const decisionKey = (skillId: string, directoryId: string) =>
     `${skillId}:${directoryId}`;
   async function previewCopy() {
@@ -208,6 +258,16 @@ function List() {
         </div>
         <div className={styles.row}>
           <Link to="/operations">操作记录</Link>
+          <button
+            disabled={!selectedSkills.length || busy}
+            onClick={() => {
+              setExportOpen(true);
+              setExportPreview(null);
+            }}
+          >
+            导出分享包
+            {selectedSkills.length ? `（${selectedSkills.length}）` : ""}
+          </button>
           <button
             disabled={!selectedSkills.length || busy}
             onClick={() => {
@@ -331,6 +391,71 @@ function List() {
         <button disabled={busy}>{busy ? "扫描中…" : "搜索 / 刷新"}</button>
       </form>
       <ErrorBox error={error} />
+      {exportOpen && (
+        <section className={styles.panel}>
+          <div className={styles.copyHeader}>
+            <div>
+              <h2>导出 {selectedSkills.length} 个 Skill</h2>
+              <p>
+                使用每个 Skill 的默认来源，打包完整目录；根 Skill 只打包
+                SKILL.md。
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setExportOpen(false);
+                setExportPreview(null);
+              }}
+            >
+              关闭
+            </button>
+          </div>
+          <p>
+            下载前请检查文件清单，确认其中没有不想分享的指令、脚本或个人信息。
+          </p>
+          {!exportPreview ? (
+            <button
+              className={styles.primary}
+              disabled={!selectedSkills.length || busy}
+              onClick={() => void previewExport()}
+            >
+              {busy ? "检查中…" : "预览文件清单"}
+            </button>
+          ) : (
+            <>
+              <p>
+                {exportPreview.skillCount} 个 Skill，
+                {exportPreview.files.length} 个文件，
+                {exportPreview.totalBytes.toLocaleString("zh-CN")} 字节
+              </p>
+              <div className={styles.exportList}>
+                {exportPreview.files.map((file: any) => (
+                  <code key={file.path}>{file.path}</code>
+                ))}
+              </div>
+              {exportPreview.excluded.length > 0 && (
+                <details>
+                  <summary>
+                    已排除 {exportPreview.excluded.length} 个私有或生成文件
+                  </summary>
+                  <div className={styles.exportList}>
+                    {exportPreview.excluded.map((file: any) => (
+                      <code key={file.path}>{file.path}</code>
+                    ))}
+                  </div>
+                </details>
+              )}
+              <button
+                className={styles.primary}
+                disabled={busy}
+                onClick={() => void downloadExport()}
+              >
+                {busy ? "打包中…" : "下载 ZIP"}
+              </button>
+            </>
+          )}
+        </section>
+      )}
       {syncOpen && (
         <section className={styles.panel}>
           <div className={styles.copyHeader}>
@@ -654,13 +779,14 @@ function List() {
               <input
                 type="checkbox"
                 checked={selectedSkillIds.includes(s.skillId)}
-                onChange={(event) =>
+                onChange={(event) => {
                   setSelectedSkillIds(
                     event.target.checked
                       ? [...selectedSkillIds, s.skillId]
                       : selectedSkillIds.filter((id) => id !== s.skillId),
-                  )
-                }
+                  );
+                  setExportPreview(null);
+                }}
               />
               选择
             </label>

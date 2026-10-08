@@ -115,6 +115,41 @@ export function createApp(manager: Manager) {
       return { operations: await manager.operations(limit) };
     }),
   );
+  const exportSchema = z
+    .object({
+      skillIds: z
+        .array(z.string())
+        .min(1)
+        .max(100)
+        .refine((ids) => new Set(ids).size === ids.length),
+    })
+    .strict();
+  app.post(
+    "/api/skills/export/preview",
+    route((req) =>
+      manager.exportPreview(exportSchema.parse(req.body).skillIds),
+    ),
+  );
+  app.post("/api/skills/export", async (req, res, next) => {
+    try {
+      const body = exportSchema
+        .extend({ expectedFingerprint: z.string().regex(/^[a-f0-9]{64}$/) })
+        .strict()
+        .parse(req.body);
+      const archive = await manager.exportZip(
+        body.skillIds,
+        body.expectedFingerprint,
+      );
+      res.set({
+        "Content-Type": "application/zip",
+        "Content-Disposition": 'attachment; filename="skills-share.zip"',
+        "Cache-Control": "no-store",
+      });
+      res.send(archive);
+    } catch (error) {
+      next(error);
+    }
+  });
   const copySchema = z
     .object({
       skillIds: z.array(z.string()).min(1),

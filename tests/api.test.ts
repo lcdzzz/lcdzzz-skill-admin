@@ -3,6 +3,7 @@ import * as fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import request from "supertest";
+import { strFromU8, unzipSync } from "fflate";
 import { Manager } from "../server/service";
 import { Repository, atomicWrite } from "../server/storage";
 import { createApp } from "../server/app";
@@ -28,6 +29,115 @@ const get = (url: string) =>
 const post = (url: string, body: object) =>
   request(app).post(`/api${url}`).set("Host", "127.0.0.1").send(body);
 describe("核心闭环", () => {
+  it("预览并下载所选 Skill 的完整目录，排除本机私有文件", async () => {
+    await manager.register(root);
+    for (const name of ["share-me", "leave-here"]) {
+      await fs.mkdir(path.join(root, name, "references"), { recursive: true });
+      await fs.writeFile(
+        path.join(root, name, "SKILL.md"),
+        `---\nname: ${name}\n---\n`,
+      );
+      await fs.writeFile(path.join(root, name, "references/guide.md"), "guide");
+    }
+    await fs.writeFile(
+      path.join(root, "share-me/.env"),
+      "PRIVATE_TOKEN=secret",
+    );
+    const skills = (await get("/skills")).body.data.skills;
+    const selected = skills.find((skill: any) => skill.name === "share-me");
+    const preview = await post("/skills/export/preview", {
+      skillIds: [selected.skillId],
+    });
+    expect(preview.status).toBe(200);
+    expect(preview.body.data.files.map((file: any) => file.path)).toEqual([
+      "skills/share-me/SKILL.md",
+      "skills/share-me/references/guide.md",
+    ]);
+    expect(preview.body.data.excluded).toEqual([
+      { path: "skills/share-me/.env", reason: "私有或生成文件" },
+    ]);
+    expect(JSON.stringify(preview.body.data)).not.toContain(temporary);
+
+    const download = await request(app)
+      .post("/api/skills/export")
+      .set("Host", "127.0.0.1")
+      .send({
+        skillIds: [selected.skillId],
+        expectedFingerprint: preview.body.data.fingerprint,
+      })
+      .buffer(true)
+      .parse((response, callback) => {
+        const chunks: Buffer[] = [];
+        response.on("data", (chunk: Buffer) => chunks.push(chunk));
+        response.on("end", () => callback(null, Buffer.concat(chunks)));
+      });
+    expect(download.status).toBe(200);
+    expect(download.headers["content-type"]).toMatch(/application\/zip/);
+    const entries = unzipSync(new Uint8Array(download.body));
+    expect(Object.keys(entries).sort()).toEqual([
+      "README.txt",
+      "skills/share-me/SKILL.md",
+      "skills/share-me/references/guide.md",
+    ]);
+    expect(strFromU8(entries["skills/share-me/references/guide.md"])).toBe(
+      "guide",
+    );
+    expect(strFromU8(entries["README.txt"])).not.toContain(temporary);
+  });
+
+  it("导出前内容改变时拒绝旧预览", async () => {
+    await manager.register(root);
+    await fs.mkdir(path.join(root, "changing"));
+    await fs.writeFile(
+      path.join(root, "changing/SKILL.md"),
+      "---\nname: changing\n---\n",
+    );
+    const skillId = (await get("/skills")).body.data.skills[0].skillId;
+    const preview = await post("/skills/export/preview", {
+      skillIds: [skillId],
+    });
+    await fs.writeFile(path.join(root, "changing/SKILL.md"), "updated");
+    const download = await post("/skills/export", {
+      skillIds: [skillId],
+      expectedFingerprint: preview.body.data.fingerprint,
+    });
+    expect(download.status).toBe(409);
+    expect(download.body.error.code).toBe("CONFLICT");
+  });
+
+  it("根 Skill 仅导出自身 SKILL.md，拒绝普通 Skill 内的符号链接", async () => {
+    if (process.platform === "win32") return;
+    await manager.register(root);
+    await fs.writeFile(
+      path.join(root, "SKILL.md"),
+      "---\nname: root-helper\n---\n",
+    );
+    await fs.mkdir(path.join(root, "child"));
+    await fs.writeFile(
+      path.join(root, "child/SKILL.md"),
+      "---\nname: child\n---\n",
+    );
+    const skills = (await get("/skills")).body.data.skills;
+    const rootId = skills.find(
+      (skill: any) => skill.name === "root-helper",
+    ).skillId;
+    const preview = await post("/skills/export/preview", {
+      skillIds: [rootId],
+    });
+    expect(preview.body.data.files.map((file: any) => file.path)).toEqual([
+      "skills/root-helper/SKILL.md",
+    ]);
+    await fs.symlink(
+      path.join(temporary, ".skill-manager/state.json"),
+      path.join(root, "child/secret"),
+    );
+    const childId = skills.find((skill: any) => skill.name === "child").skillId;
+    const unsafe = await post("/skills/export/preview", {
+      skillIds: [childId],
+    });
+    expect(unsafe.status).toBe(400);
+    expect(unsafe.body.error.code).toBe("PATH_NOT_ALLOWED");
+  });
   it("首次为空，登记、创建、读取、保存及冲突保护", async () => {
     expect((await get("/skills")).body.data.skills).toEqual([]);
     const directory = await post("/directories", { path: root });
