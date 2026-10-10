@@ -40,9 +40,9 @@ chmod +x start.sh
 ./start.sh
 ```
 
-Windows：双击 `start.cmd`。
+Windows x64：下载 Windows 压缩包，解压到普通文件夹后双击 `start.cmd`。压缩包自带 Node.js，不需要安装 Node 或 pnpm。
 
-启动脚本会检查 Node.js 版本、启动服务并自动打开浏览器。预构建包已包含前端文件、编译后的后端和生产依赖，不需要 pnpm；仍然需要 Node.js 20.19 或更高版本。
+启动脚本会检查 Node.js 版本、启动服务并自动打开浏览器。macOS 预构建包仍需要系统安装 Node.js 20.19 或更高版本；Windows 预构建包优先使用包内的 `runtime/node.exe`。源码运行需要系统 Node.js 20.19 或更高版本。
 
 ### 方式二：从源码运行
 
@@ -190,7 +190,7 @@ ZIP 内是 `skills/` 文件夹和一份安装说明，不包含管理器程序�
 
 ## 环境要求
 
-- Node.js 20.19 或更高版本
+- 源码运行和 macOS 预构建包需要 Node.js 20.19 或更高版本；Windows x64 预构建包已内置
 - 源码运行需要 pnpm
 - macOS 支持 Apple Silicon 和 Intel，Windows 支持 x64，Linux 支持源码运行，暂不提供预构建包
 

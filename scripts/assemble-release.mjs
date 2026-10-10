@@ -54,3 +54,13 @@ await writeFile(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`);
 await cp(path.join(root, "scripts/start.sh"), path.join(output, "start.sh"));
 await cp(path.join(root, "scripts/start.cmd"), path.join(output, "start.cmd"));
 await chmod(path.join(output, "start.sh"), 0o755);
+
+if (process.platform === "win32") {
+  const runtime = path.join(output, "runtime");
+  await mkdir(runtime);
+  await cp(process.execPath, path.join(runtime, "node.exe"));
+  await cp(
+    path.join(path.dirname(process.execPath), "LICENSE"),
+    path.join(runtime, "LICENSE"),
+  );
+}

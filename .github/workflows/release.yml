@@ -41,8 +41,7 @@ jobs:
       - name: Prepare clean runtime dependencies
         shell: bash
         run: |
-          rm -rf release-runtime
-          mkdir release-runtime
+          mkdir -p release-runtime
           cp package.json pnpm-lock.yaml release-runtime/
           pnpm --dir release-runtime install --prod --frozen-lockfile --ignore-workspace --ignore-scripts --config.node-linker=hoisted
           cp -R build dist LICENSE README.md release-runtime/
@@ -56,6 +55,10 @@ jobs:
         if: matrix.archive == 'zip'
         shell: pwsh
         run: Compress-Archive -Path release\* -DestinationPath "skill-manager-${{ github.ref_name }}-${{ matrix.artifact }}.zip"
+      - name: Smoke test Windows portable zip without system Node
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: ./scripts/smoke-windows-portable.ps1 "skill-manager-${{ github.ref_name }}-${{ matrix.artifact }}.zip"
       - uses: actions/upload-artifact@v4
         with:
           name: skill-manager-${{ matrix.artifact }}
