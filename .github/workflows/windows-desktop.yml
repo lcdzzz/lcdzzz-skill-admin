@@ -1,0 +1,35 @@
+name: Windows desktop candidate
+
+on:
+  push:
+    branches: [codex/windows-desktop-exe]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.12.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm package:windows
+      - name: Test portable desktop EXE without system Node
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem release-desktop/*.exe | Select-Object -First 1
+          ./scripts/smoke-windows-desktop.ps1 $exe.FullName
+      - uses: actions/upload-artifact@v4
+        with:
+          name: skill-manager-windows-desktop-candidate
+          path: release-desktop/*.exe

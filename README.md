@@ -40,7 +40,12 @@ chmod +x start.sh
 ./start.sh
 ```
 
-Windows x64：下载 Windows 压缩包，解压到普通文件夹后双击 `start.cmd`。压缩包自带 Node.js，不需要安装 Node 或 pnpm。
+Windows x64：
+
+- **独立窗口版（EXE）**：下载 `skill-manager-v版本-windows-x64.exe`，放到普通可写文件夹，双击打开。自带 Node 和界面运行环境，无需安装依赖或手工解压。关闭窗口会停止服务；再次双击会唤起已有窗口。
+- **浏览器版（ZIP）**：下载 Windows 压缩包，解压后双击 `start.cmd`。压缩包自带 Node.js，不需要安装 Node 或 pnpm。
+
+EXE 版的数据保存在 EXE 旁边的 `.skill-manager/` 文件夹，桌面缓存保存在其 `desktop-profile/` 子目录。升级时先退出旧版，把旧 `.skill-manager/` 复制到新 EXE 所在目录；也可以把新 EXE 放到旧数据所在目录。数据目录不要放在程序临时展开目录里。
 
 启动脚本会检查 Node.js 版本、启动服务并自动打开浏览器。macOS 预构建包仍需要系统安装 Node.js 20.19 或更高版本；Windows 预构建包优先使用包内的 `runtime/node.exe`。源码运行需要系统 Node.js 20.19 或更高版本。
 
@@ -60,6 +65,20 @@ pnpm dev
 ```
 
 默认地址 <http://127.0.0.1:8787>，可以用 `PORT=8788 pnpm dev` 覆盖端口。
+
+### 从源码构建 Windows 桌面版
+
+开发与打包桌面版需要 Node.js 22.12+：
+
+```sh
+pnpm install --frozen-lockfile
+pnpm desktop:setup
+pnpm build
+pnpm desktop          # 启动独立窗口用于开发验收
+pnpm package:windows  # 生成 release-desktop/ 下的 Windows x64 便携 EXE
+```
+
+Windows 验收：`pwsh -File scripts/smoke-windows-desktop.ps1 release-desktop/skill-manager-v版本-windows-x64.exe`。脚本从含空格和中文的独立目录启动 EXE，检查旧数据兼容、重复启动、登记目录、复制粘贴、编辑保存、导出和关闭服务，并清除系统 Node 的 PATH。
 
 ### 第一次使用
 

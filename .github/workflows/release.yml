@@ -59,6 +59,18 @@ jobs:
         if: matrix.archive == 'zip'
         shell: pwsh
         run: ./scripts/smoke-windows-portable.ps1 "skill-manager-${{ github.ref_name }}-${{ matrix.artifact }}.zip"
+      - name: Build Windows desktop EXE
+        if: matrix.archive == 'zip'
+        run: pnpm package:windows
+      - name: Smoke test Windows desktop EXE
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: ./scripts/smoke-windows-desktop.ps1 "release-desktop/skill-manager-${{ github.ref_name }}-windows-x64.exe"
+      - uses: actions/upload-artifact@v4
+        if: matrix.archive == 'zip'
+        with:
+          name: skill-manager-windows-desktop
+          path: release-desktop/*.exe
       - uses: actions/upload-artifact@v4
         with:
           name: skill-manager-${{ matrix.artifact }}

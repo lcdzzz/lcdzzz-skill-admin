@@ -1,0 +1,22 @@
+appId: com.lcdzzz.skillmanager
+productName: Skill Manager
+asar: true
+npmRebuild: false
+directories:
+  output: release-desktop
+files:
+  - desktop/**
+  - build/server/**
+  - dist/**
+  - LICENSE
+  - package.json
+  - "!**/*.map"
+win:
+  icon: desktop/icon.ico
+  target:
+    - target: portable
+      arch: [x64]
+  signAndEditExecutable: false
+  artifactName: skill-manager-v${version}-windows-${arch}.exe
+portable:
+  unpackDirName: false
