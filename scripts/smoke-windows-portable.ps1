@@ -37,6 +37,14 @@ try {
     }
   }
   if (-not $ready) { throw "Portable app did not respond at $url" }
+  $skillRoot = Join-Path $extractPath 'smoke-skills'
+  New-Item -Path $skillRoot -ItemType Directory | Out-Null
+  $body = @{ path = $skillRoot } | ConvertTo-Json -Compress
+  $registered = Invoke-RestMethod -Uri $url -Method Post -Body $body -ContentType 'application/json'
+  if (-not $registered.data.directoryId) { throw 'Registering a Skill directory failed.' }
+  $directories = Invoke-RestMethod -Uri $url
+  if (@($directories.data).Count -ne 1) { throw 'Registered directory was not persisted.' }
+  Write-Host "Portable app registered a directory without system Node.js."
   Write-Host "Portable app responded at $url without system Node.js."
 } finally {
   Get-CimInstance Win32_Process -Filter "name = 'node.exe'" |

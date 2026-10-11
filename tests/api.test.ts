@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
@@ -827,6 +827,41 @@ describe("核心闭环", () => {
       ).status,
     ).toBe(403);
     expect((await get("/skills").set("Host", "evil.example")).status).toBe(403);
+  });
+  it("临时 EPERM 后重试原子替换并清理临时文件", async () => {
+    const file = path.join(temporary, "state.json");
+    await fs.writeFile(file, "original");
+    const rename = vi
+      .fn<typeof fs.rename>()
+      .mockRejectedValueOnce(
+        Object.assign(new Error("transient Windows file lock"), {
+          code: "EPERM",
+        }),
+      )
+      .mockImplementation((source, target) => fs.rename(source, target));
+    await atomicWrite(file, "updated", rename);
+    expect(rename).toHaveBeenCalledTimes(2);
+    expect(await fs.readFile(file, "utf8")).toBe("updated");
+    expect(
+      (await fs.readdir(temporary)).filter((name) => name.endsWith(".tmp")),
+    ).toEqual([]);
+  });
+  it("持续 EPERM 时保留原文件并清理临时文件", async () => {
+    const file = path.join(temporary, "state.json");
+    await fs.writeFile(file, "original");
+    const rename = vi
+      .fn<typeof fs.rename>()
+      .mockRejectedValue(
+        Object.assign(new Error("persistent access denial"), { code: "EPERM" }),
+      );
+    await expect(atomicWrite(file, "updated", rename)).rejects.toMatchObject({
+      code: "EPERM",
+    });
+    expect(rename).toHaveBeenCalledTimes(6);
+    expect(await fs.readFile(file, "utf8")).toBe("original");
+    expect(
+      (await fs.readdir(temporary)).filter((name) => name.endsWith(".tmp")),
+    ).toEqual([]);
   });
   it("原子替换失败保留既有目标", async () => {
     const target = path.join(temporary, "existing");

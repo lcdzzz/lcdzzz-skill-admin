@@ -28,7 +28,11 @@ export async function authorize(root: string, candidate: string) {
     throw new Failure("PATH_NOT_ALLOWED", "符号链接或路径超出登记目录");
   return real;
 }
-export async function atomicWrite(file: string, content: string | Uint8Array) {
+export async function atomicWrite(
+  file: string,
+  content: string | Uint8Array,
+  renameFile: typeof fs.rename = fs.rename,
+) {
   const temporary = path.join(
     path.dirname(file),
     `.skill-manager-${randomUUID()}.tmp`,
@@ -49,7 +53,21 @@ export async function atomicWrite(file: string, content: string | Uint8Array) {
     } finally {
       await handle.close();
     }
-    await fs.rename(temporary, file);
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await renameFile(temporary, file);
+        break;
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (
+          attempt >= 5 ||
+          !code ||
+          !["EPERM", "EACCES", "EBUSY"].includes(code)
+        )
+          throw error;
+        await new Promise((resolve) => setTimeout(resolve, 50 * 2 ** attempt));
+      }
+    }
   } finally {
     await fs.unlink(temporary).catch(() => {});
   }
