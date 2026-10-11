@@ -53,16 +53,21 @@ exports.runSmoke = async function (window, root) {
 
   // Native copy/paste commands must operate on the React input.
   const originalClipboard = await Promise.all(
-    (await clipboard.read()).map(
-      async (item) =>
-        new ClipboardItem(
-          Object.fromEntries(
-            await Promise.all(
-              item.types.map(async (type) => [type, await item.getType(type)]),
+    (await clipboard.read())
+      .filter((item) => item.types.length > 0)
+      .map(
+        async (item) =>
+          new ClipboardItem(
+            Object.fromEntries(
+              await Promise.all(
+                item.types.map(async (type) => [
+                  type,
+                  await item.getType(type),
+                ]),
+              ),
             ),
           ),
-        ),
-    ),
+      ),
   );
   try {
     await execute(`(() => {
@@ -103,7 +108,8 @@ exports.runSmoke = async function (window, root) {
       );
     });
   } finally {
-    await clipboard.write(originalClipboard);
+    if (originalClipboard.length) await clipboard.write(originalClipboard);
+    else clipboard.clear();
   }
   await execute(`(() => {
     const input = document.querySelector('[aria-label="搜索 Skill"]');
