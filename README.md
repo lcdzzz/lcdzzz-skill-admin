@@ -31,9 +31,9 @@ Claude Code、Codex、Cursor、WorkBuddy……每个 Agent 都有自己的 `skil
 
 ### 下载和启动
 
-从 GitHub Releases 下载与你的系统和 CPU 架构对应的发行包。macOS 提供 Apple Silicon 和 Intel 版本，Windows 支持 x64；发行包内置运行时，无需安装 Node.js 或 pnpm。
+从 GitHub Releases 下载与你的系统和 CPU 架构对应的发行包。macOS 提供 Apple Silicon 和 Intel 版本，Windows 支持 x64。Windows 发行包内置运行时，无需安装 Node.js 或 pnpm。
 
-macOS：下载 `.dmg`，打开后把 **Skill Manager** 拖到 **Applications**，再从应用程序中启动。DMG 内置 Node.js 和原生窗口，不需要安装 Node、pnpm 或打开浏览器。当前 DMG 使用 ad hoc 签名，尚未进行 Developer ID 公证；首次运行时 macOS 可能显示开发者身份提示，按住 Control 点击 app，选择「打开」即可继续。
+macOS：当前 Release 中的 `.tar.gz` 需要系统 Node.js 20.19+，解压后运行 `./start.sh`。如果所选 Release 提供 `.dmg`，打开后把 **Skill Manager** 拖到 **Applications**，再从应用程序中启动；DMG 内置 Node.js 和原生窗口。使用 ad hoc 签名、未经 Developer ID 公证的 DMG 首次运行可能显示开发者身份提示，按住 Control 点击 app，选择「打开」即可继续。
 
 Windows x64：
 
