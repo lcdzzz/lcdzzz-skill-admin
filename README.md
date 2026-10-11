@@ -42,21 +42,7 @@ Windows x64：
 
 EXE 版的数据保存在 EXE 旁边的 `.skill-manager/` 文件夹，桌面缓存保存在其 `desktop-profile/` 子目录。升级时先退出旧版，把旧 `.skill-manager/` 复制到新 EXE 所在目录；也可以把新 EXE 放到旧数据所在目录。数据目录不要放在程序临时展开目录里。
 
-Windows 启动脚本会启动服务并打开浏览器。后续提供 `.exe` 发行包时，按对应 Release 的安装和启动说明使用。需要从源码运行时，见文末的「开发」章节。
-
-### 从源码构建 Windows 桌面版
-
-开发与打包桌面版需要 Node.js 22.12+：
-
-```sh
-pnpm install --frozen-lockfile
-pnpm desktop:setup
-pnpm build
-pnpm desktop          # 启动独立窗口用于开发验收
-pnpm package:windows  # 生成 release-desktop/ 下的 Windows x64 便携 EXE
-```
-
-Windows 验收：`pwsh -File scripts/smoke-windows-desktop.ps1 release-desktop/skill-manager-v版本-windows-x64.exe`。脚本从含空格和中文的独立目录启动 EXE，检查旧数据兼容、重复启动、登记目录、复制粘贴、编辑保存、导出和关闭服务，并清除系统 Node 的 PATH。
+Windows ZIP 的启动脚本会启动服务并打开浏览器；EXE 直接打开独立窗口。需要从源码运行时，见文末的「开发」章节。
 
 ### 第一次使用
 
@@ -279,6 +265,20 @@ pnpm dev
 ```
 
 默认地址 <http://127.0.0.1:8787>。
+
+### 从源码构建 Windows 桌面版
+
+开发与打包桌面版需要 Node.js 22.12+：
+
+```sh
+pnpm install --frozen-lockfile
+pnpm desktop:setup
+pnpm build
+pnpm desktop          # 启动独立窗口用于开发验收
+pnpm package:windows  # 生成 release-desktop/ 下的 Windows x64 便携 EXE
+```
+
+Windows 验收：`pwsh -File scripts/smoke-windows-desktop.ps1 release-desktop/skill-manager-v版本-windows-x64.exe`。脚本从含空格和中文的独立目录启动 EXE，检查旧数据兼容、重复启动、登记目录、复制粘贴、编辑保存、导出和关闭服务，并清除系统 Node 的 PATH。
 
 ### 环境变量
 
