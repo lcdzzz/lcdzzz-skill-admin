@@ -10,6 +10,7 @@ import {
 } from "react-router-dom";
 import YAML from "yaml";
 import styles from "./style.module.css";
+import ImportPanel from "./ImportPanel";
 const Editor = lazy(() => import("./Editor"));
 
 async function api(url: string, method = "GET", body?: unknown) {
@@ -46,6 +47,7 @@ function List() {
   const [busy, setBusy] = useState(false);
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
   const [exportOpen, setExportOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [exportPreview, setExportPreview] = useState<any>(null);
   const [copyOpen, setCopyOpen] = useState(false);
   const [copyTargets, setCopyTargets] = useState<string[]>([]);
@@ -258,6 +260,9 @@ function List() {
         </div>
         <div className={styles.row}>
           <Link to="/operations">操作记录</Link>
+          <button disabled={busy} onClick={() => setImportOpen(true)}>
+            导入分享包
+          </button>
           <button
             disabled={!selectedSkills.length || busy}
             onClick={() => {
@@ -391,6 +396,13 @@ function List() {
         <button disabled={busy}>{busy ? "扫描中…" : "搜索 / 刷新"}</button>
       </form>
       <ErrorBox error={error} />
+      {importOpen && (
+        <ImportPanel
+          directories={directories}
+          onClose={() => setImportOpen(false)}
+          onImported={() => refresh()}
+        />
+      )}
       {exportOpen && (
         <section className={styles.panel}>
           <div className={styles.copyHeader}>
@@ -858,6 +870,7 @@ function Operations() {
     delete: "移除登记",
     copy: "复制",
     sync: "同步",
+    import: "导入",
   };
   const statusName: Record<string, string> = {
     success: "成功",

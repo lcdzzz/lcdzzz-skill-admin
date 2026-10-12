@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { strToU8, zipSync } from "fflate";
+import { strToU8, zipSync, type Zippable } from "fflate";
 import { authorize, Failure, inside } from "./storage.js";
 
 const MAX_FILES = 1000;
@@ -24,7 +24,7 @@ export type ExportSource = {
   rootPath: string;
 };
 
-type ArchiveFile = { path: string; data: Uint8Array };
+type ArchiveFile = { path: string; data: Uint8Array; mode: number };
 
 function excluded(name: string) {
   return (
@@ -108,7 +108,11 @@ export async function prepareExport(sources: ExportSource[]) {
         totalBytes += data.byteLength;
         if (totalBytes > MAX_BYTES)
           throw new Failure("EXPORT_TOO_LARGE", "导出超过 100 MB，请减少选择");
-        files.push({ path: `${archiveRoot}/${relative}`, data });
+        files.push({
+          path: `${archiveRoot}/${relative}`,
+          data,
+          mode: stat.mode & 0o777,
+        });
       } else {
         throw new Failure("PATH_NOT_ALLOWED", "Skill 包含无法导出的文件类型");
       }
@@ -125,7 +129,7 @@ export async function prepareExport(sources: ExportSource[]) {
   omitted.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   const fingerprintHash = createHash("sha256");
   for (const file of files) {
-    fingerprintHash.update(file.path);
+    fingerprintHash.update(JSON.stringify([file.path, file.mode]));
     fingerprintHash.update("\0");
     fingerprintHash.update(createHash("sha256").update(file.data).digest());
   }
@@ -142,12 +146,17 @@ export async function prepareExport(sources: ExportSource[]) {
 export function makeExportZip(
   prepared: Awaited<ReturnType<typeof prepareExport>>,
 ) {
-  const contents: Record<string, Uint8Array> = Object.create(null);
+  const contents: Zippable = Object.create(null);
   contents["README.txt"] = strToU8(
-    "Skill 分享包\n\n将 skills/ 下选中的 Skill 文件夹复制到朋友自己的 Skill 根目录，" +
-      "再在 Skill 管理器中登记该根目录。\n管理器请单独从项目发布页获取。\n" +
-      "复制前请自行检查 Skill 指令和脚本。\n",
+    "Skill 分享包\n\n在管理器中点击“导入分享包”，选择本 ZIP 和目标 Skill 根目录，" +
+      "预览后点击“开始导入”。同名 Skill 可选择跳过或覆盖。\n" +
+      "管理器请单独从项目发布页获取。旧版管理器可手动复制 skills/ 下的 Skill 文件夹。\n" +
+      "安装前请检查 Skill 指令和脚本。\n",
   );
-  for (const file of prepared.files) contents[file.path] = file.data;
+  for (const file of prepared.files)
+    contents[file.path] = [
+      file.data,
+      { os: 3, attrs: ((0x8000 | file.mode) << 16) >>> 0 },
+    ];
   return Buffer.from(zipSync(contents, { level: 6 }));
 }

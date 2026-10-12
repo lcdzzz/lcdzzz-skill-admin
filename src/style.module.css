@@ -226,6 +226,13 @@
   border-radius: 8px;
   background: #f9fafb;
 }
+.importItem {
+  padding: 16px 0;
+  border-top: 1px solid #eaecf0;
+}
+.importItem h3 {
+  margin: 0 0 8px;
+}
 .operationList {
   display: grid;
   gap: 12px;

@@ -206,4 +206,113 @@ exports.runSmoke = async function (window, root) {
     await fs.readFile(skillFile, "utf8"),
   );
   assert(!Object.keys(entries).some((name) => name.includes(".skill-manager")));
+
+  // Use the saved ZIP through the actual file input and import panel.
+  await button("导入分享包");
+  await until(
+    () =>
+      execute(
+        "!!document.querySelector('section[aria-label=\"导入分享包\"] input[type=file]')",
+      ),
+    "import file input",
+  );
+  window.webContents.debugger.attach("1.3");
+  try {
+    const { root: documentRoot } =
+      await window.webContents.debugger.sendCommand("DOM.getDocument");
+    const { nodeId } = await window.webContents.debugger.sendCommand(
+      "DOM.querySelector",
+      {
+        nodeId: documentRoot.nodeId,
+        selector: 'section[aria-label="导入分享包"] input[type=file]',
+      },
+    );
+    await window.webContents.debugger.sendCommand("DOM.setFileInputFiles", {
+      nodeId,
+      files: [target],
+    });
+  } finally {
+    window.webContents.debugger.detach();
+  }
+  await button("预览导入");
+  await until(
+    () =>
+      execute(
+        "!!document.querySelector('[aria-label=\"desktop-smoke 的导入方式\"]')",
+      ),
+    "import preview",
+  );
+  const imported = path.join(root, "legacy-skills/desktop-smoke/SKILL.md");
+  await assert.rejects(
+    fs.access(imported),
+    "Preview must not write Skill files",
+  );
+  await button("开始导入");
+  await until(
+    async () =>
+      fs.readFile(imported, "utf8").then(
+        (content) =>
+          content === strFromU8(entries["skills/desktop-smoke/SKILL.md"]),
+        () => false,
+      ),
+    "imported Skill content",
+  );
+  await until(
+    () =>
+      execute(
+        "document.querySelector('section[aria-label=\"导入分享包\"] [role=status]')?.textContent.includes('成功')",
+      ),
+    "import result",
+  );
+
+  // Conflict defaults to skip; explicit overwrite keeps target-only files.
+  const localFile = path.join(path.dirname(imported), "local-only.txt");
+  await fs.writeFile(localFile, "keep local file");
+  await fs.writeFile(imported, "local edit");
+  await button("预览导入");
+  await until(
+    () =>
+      execute(
+        "document.querySelector('[aria-label=\"desktop-smoke 的导入方式\"]')?.value === 'skip'",
+      ),
+    "default conflict decision",
+  );
+  assert.equal(await fs.readFile(imported, "utf8"), "local edit");
+  assert(
+    await execute(
+      "[...document.querySelectorAll('button')].find(b => b.textContent.trim() === '开始导入').disabled",
+    ),
+  );
+  await execute(`(() => {
+    const select = document.querySelector('[aria-label="desktop-smoke 的导入方式"]');
+    select.value = 'overwrite'; select.dispatchEvent(new Event('change', { bubbles: true }));
+  })()`);
+  await button("开始导入");
+  await until(
+    async () =>
+      (await fs.readFile(imported, "utf8")) ===
+      strFromU8(entries["skills/desktop-smoke/SKILL.md"]),
+    "overwrite Skill",
+  );
+  assert.equal(await fs.readFile(localFile, "utf8"), "keep local file");
+  await until(
+    () =>
+      execute(
+        "document.querySelector('section[aria-label=\"导入分享包\"] [role=status]')?.textContent.includes('成功')",
+      ),
+    "overwrite result",
+  );
+  const operations = await execute(
+    "fetch('/api/operations').then(r => r.json()).then(r => r.data.operations)",
+  );
+  assert(
+    operations.some(
+      (operation) =>
+        operation.operation === "import" && operation.status === "success",
+    ),
+  );
+  await fs.writeFile(
+    path.join(root, "desktop-import.png"),
+    (await window.webContents.capturePage()).toPNG(),
+  );
 };

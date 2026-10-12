@@ -1,8 +1,15 @@
 import * as fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+import { randomUUID } from "node:crypto";
 import YAML from "yaml";
 import { makeExportZip, prepareExport } from "./export.js";
+import {
+  readImportPackage,
+  inspectImportTarget,
+  installImportedSkill,
+  type ImportPackage,
+} from "./import.js";
 import {
   Repository,
   Failure,
@@ -15,6 +22,15 @@ import {
 
 export class Manager {
   private queue: Promise<unknown> = Promise.resolve();
+  private pendingImports = new Map<
+    string,
+    {
+      archive: ImportPackage;
+      directoryId: string;
+      fingerprint: string;
+      createdAt: number;
+    }
+  >();
   constructor(public repository: Repository) {}
   async operations(limit: number) {
     return (await this.repository.operations())
@@ -291,6 +307,180 @@ export class Manager {
     if (prepared.fingerprint !== expectedFingerprint)
       throw new Failure("CONFLICT", "Skill 文件已改变，请重新预览后导出", 409);
     return makeExportZip(prepared);
+  }
+  private async importContext(archive: ImportPackage, directoryId: string) {
+    const directory = (await this.directories()).find(
+      (item) => item.directoryId === directoryId && item.available,
+    );
+    if (!directory)
+      throw new Failure("DIRECTORY_UNAVAILABLE", "请选择可用的已登记目标目录");
+    const items = [];
+    for (const skill of archive.skills) {
+      const {
+        tree: _tree,
+        fingerprint,
+        ...item
+      } = await inspectImportTarget(directory.path, skill);
+      items.push({
+        ...item,
+        fingerprint,
+        content: skill.files
+          .find((file) => file.path === "SKILL.md")!
+          .data.toString("utf8"),
+        files: skill.files.map((file) => ({
+          path: file.path,
+          size: file.data.length,
+        })),
+      });
+    }
+    return {
+      directory,
+      items,
+      fingerprint: hash(JSON.stringify([directory.directoryId, items])),
+    };
+  }
+  async importPreview(bytes: Buffer, directoryId: string) {
+    return this.exclusive(async () => {
+      const archive = readImportPackage(bytes);
+      const context = await this.importContext(archive, directoryId);
+      for (const [id, pending] of this.pendingImports) {
+        if (Date.now() - pending.createdAt > 15 * 60 * 1000)
+          this.pendingImports.delete(id);
+      }
+      const importId = randomUUID();
+      this.pendingImports.set(importId, {
+        archive,
+        directoryId,
+        fingerprint: context.fingerprint,
+        createdAt: Date.now(),
+      });
+      setTimeout(
+        () => this.pendingImports.delete(importId),
+        15 * 60 * 1000,
+      ).unref();
+      while (
+        this.pendingImports.size > 2 ||
+        [...this.pendingImports.values()].reduce(
+          (sum, pending) => sum + pending.archive.totalBytes,
+          0,
+        ) >
+          100 * 1024 * 1024
+      ) {
+        this.pendingImports.delete(this.pendingImports.keys().next().value!);
+      }
+      return {
+        importId,
+        fingerprint: context.fingerprint,
+        totalBytes: archive.totalBytes,
+        items: context.items.map(
+          ({ fingerprint: _fingerprint, ...item }) => item,
+        ),
+      };
+    });
+  }
+  async importSkills(input: {
+    importId: string;
+    expectedFingerprint: string;
+    decisions: {
+      directoryName: string;
+      action: "install" | "overwrite" | "skip";
+    }[];
+  }) {
+    return this.exclusive(async () => {
+      const pending = this.pendingImports.get(input.importId);
+      if (!pending || Date.now() - pending.createdAt > 15 * 60 * 1000) {
+        this.pendingImports.delete(input.importId);
+        throw new Failure(
+          "IMPORT_EXPIRED",
+          "导入预览已过期，请重新选择分享包并预览",
+          410,
+        );
+      }
+      const context = await this.importContext(
+        pending.archive,
+        pending.directoryId,
+      );
+      if (
+        input.expectedFingerprint !== pending.fingerprint ||
+        context.fingerprint !== pending.fingerprint
+      )
+        throw new Failure("CONFLICT", "目标目录已改变，请重新预览后导入", 409);
+      const decisions = new Map(
+        input.decisions.map((item) => [item.directoryName, item.action]),
+      );
+      if (
+        decisions.size !== input.decisions.length ||
+        decisions.size !== context.items.length ||
+        context.items.some((item) => !decisions.has(item.directoryName))
+      )
+        throw new Failure("VALIDATION_ERROR", "请为每个 Skill 选择导入或跳过");
+      for (const item of context.items) {
+        const action = decisions.get(item.directoryName)!;
+        if (
+          (item.conflict && action === "install") ||
+          (action === "overwrite" && !item.canOverwrite)
+        )
+          throw new Failure(
+            "IMPORT_DECISION_REQUIRED",
+            "目标 Skill 已存在或不可覆盖，请选择跳过或允许的覆盖方式",
+            409,
+          );
+      }
+      await this.repository.read();
+      await this.repository.operations();
+      const results = [];
+      for (const skill of pending.archive.skills) {
+        const action = decisions.get(skill.directoryName)!;
+        const item = context.items.find(
+          (candidate) => candidate.directoryName === skill.directoryName,
+        )!;
+        let status: "success" | "skipped" | "failed" =
+          action === "skip" ? "skipped" : "success";
+        let message = action === "skip" ? "已跳过" : "已导入";
+        let errorCode: string | undefined;
+        if (action !== "skip") {
+          try {
+            const target = await inspectImportTarget(
+              context.directory.path,
+              skill,
+            );
+            if (
+              target.fingerprint !== item.fingerprint ||
+              target.targetPath !== item.targetPath
+            )
+              throw new Failure("CONFLICT", "目标 Skill 已改变，请重新预览");
+            await installImportedSkill(context.directory.path, skill, target);
+          } catch (error: any) {
+            status = "failed";
+            message = error.message;
+            errorCode = error.code || "IO_ERROR";
+          }
+        }
+        try {
+          await this.recordOperation({
+            operation: "import",
+            skillId: hash(skill.name),
+            directoryId: pending.directoryId,
+            path: item.targetPath,
+            status,
+            errorCode,
+            message,
+          });
+        } catch {
+          message += "；操作记录保存失败";
+        }
+        results.push({
+          directoryName: skill.directoryName,
+          name: skill.name,
+          targetPath: item.targetPath,
+          status,
+          message,
+          ...(errorCode ? { errorCode } : {}),
+        });
+      }
+      this.pendingImports.delete(input.importId);
+      return { results };
+    });
   }
   async setDefaultDirectory(skillId: string, directoryId: string | null) {
     return this.exclusive(async () => {

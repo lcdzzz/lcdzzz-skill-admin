@@ -2,7 +2,7 @@ name: Windows desktop candidate
 
 on:
   push:
-    branches: [codex/windows-desktop-exe]
+    branches: [codex/windows-desktop-exe, codex/windows-desktop-import]
   workflow_dispatch:
 
 permissions:
@@ -33,3 +33,10 @@ jobs:
         with:
           name: skill-manager-windows-desktop-candidate
           path: release-desktop/*.exe
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: desktop-acceptance-evidence
+          path: |
+            ${{ runner.temp }}/Skill Manager 桌面 */desktop-smoke.jsonl
+            ${{ runner.temp }}/Skill Manager 桌面 */desktop-import.png

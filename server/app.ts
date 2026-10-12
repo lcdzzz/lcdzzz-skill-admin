@@ -125,6 +125,43 @@ export function createApp(manager: Manager) {
     })
     .strict();
   app.post(
+    "/api/skills/import/preview",
+    express.raw({ type: "application/zip", limit: "101mb" }),
+    route((req) => {
+      const { directoryId } = z
+        .object({ directoryId: z.string().min(1) })
+        .strict()
+        .parse(req.query);
+      if (!Buffer.isBuffer(req.body))
+        throw new Failure("VALIDATION_ERROR", "请选择 ZIP 分享包");
+      return manager.importPreview(req.body, directoryId);
+    }),
+  );
+  app.post(
+    "/api/skills/import",
+    route((req) =>
+      manager.importSkills(
+        z
+          .object({
+            importId: z.string().uuid(),
+            expectedFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+            decisions: z
+              .array(
+                z
+                  .object({
+                    directoryName: z.string().min(1),
+                    action: z.enum(["install", "overwrite", "skip"]),
+                  })
+                  .strict(),
+              )
+              .max(100),
+          })
+          .strict()
+          .parse(req.body),
+      ),
+    ),
+  );
+  app.post(
     "/api/skills/export/preview",
     route((req) =>
       manager.exportPreview(exportSchema.parse(req.body).skillIds),
@@ -285,6 +322,15 @@ export function createApp(manager: Manager) {
       .json({ error: { code: "NOT_FOUND", message: "接口不存在" } });
   });
   app.use((error: any, _req: any, res: any, _next: any) => {
+    if (error.type === "entity.too.large") {
+      res.status(413).json({
+        error: {
+          code: "REQUEST_TOO_LARGE",
+          message: "上传或请求内容超过大小限制",
+        },
+      });
+      return;
+    }
     const validation =
       error instanceof z.ZodError || error.type === "entity.parse.failed";
     res

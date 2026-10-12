@@ -52,7 +52,7 @@ try {
     $state = Get-Content (Join-Path $data 'state.json') -Raw | ConvertFrom-Json
     if ($state.directories.Count -ne 2 -or $state.directories[0].path -ne $legacy) { throw 'Legacy state was not retained.' }
     if (-not (Test-Path (Join-Path $testRoot 'skills-share.zip'))) { throw 'Skill ZIP was not saved.' }
-    Write-Host 'Portable desktop EXE passed: independent window, legacy state, single instance, registration, copy/paste, Markdown save, ZIP export and clean shutdown without system Node.'
+    Write-Host 'Portable desktop EXE passed: independent window, legacy state, single instance, registration, copy/paste, Markdown save, ZIP export/import, conflict preview/overwrite and clean shutdown without system Node.'
     Get-Content $log
 } finally {
     foreach ($started in @($process, $second)) {
