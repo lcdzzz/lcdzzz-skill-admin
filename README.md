@@ -31,9 +31,9 @@ Claude Code、Codex、Cursor、WorkBuddy……每个 Agent 都有自己的 `skil
 
 ### 下载和启动
 
-从 GitHub Releases 下载与你的系统和 CPU 架构对应的发行包。macOS 提供 Apple Silicon 和 Intel 版本，Windows 支持 x64。Windows 发行包内置运行时，无需安装 Node.js 或 pnpm。
+从 GitHub Releases 下载与你的系统和 CPU 架构对应的发行包。macOS 提供 Apple Silicon 和 Intel 版本，Windows 支持 x64。DMG、Windows EXE 和 ZIP 均内置运行时，无需安装 Node.js 或 pnpm。
 
-macOS：当前 Release 中的 `.tar.gz` 需要系统 Node.js 20.19+，解压后运行 `./start.sh`。如果所选 Release 提供 `.dmg`，打开后把 **Skill Manager** 拖到 **Applications**，再从应用程序中启动；DMG 内置 Node.js 和原生窗口。使用 ad hoc 签名、未经 Developer ID 公证的 DMG 首次运行可能显示开发者身份提示，按住 Control 点击 app，选择「打开」即可继续。
+macOS 12 或更新版本：下载对应架构的 `.dmg`，打开后把 **Skill Manager** 拖到 **Applications**，再从应用程序中启动。DMG 内置 Node.js 和原生窗口。本版采用 ad hoc 签名，未经 Apple 公证。如果 macOS 阻止首次打开，请按系统提示到「系统设置 → 隐私与安全性」检查并允许打开。
 
 Windows x64：
 
@@ -245,7 +245,7 @@ WorkBuddy 的常见目录把 `.agents/skills` 换成 `.workbuddy/skills` 即可�
 
 ### 环境要求
 
-- Node.js 20.19 或更高版本
+- Node.js 22.13 或更高版本
 - pnpm（版本见 `package.json` 的 `packageManager`）
 - macOS、Windows 和 Linux 均可从源码运行；Linux 暂不提供预构建包
 
@@ -268,7 +268,7 @@ pnpm dev
 
 ### 从源码构建 Windows 桌面版
 
-开发与打包桌面版需要 Node.js 22.12+：
+开发与打包桌面版需要 Node.js 22.13+：
 
 ```sh
 pnpm install --frozen-lockfile
@@ -279,6 +279,34 @@ pnpm package:windows  # 生成 release-desktop/ 下的 Windows x64 便携 EXE
 ```
 
 Windows 验收：`pwsh -File scripts/smoke-windows-desktop.ps1 release-desktop/skill-manager-v版本-windows-x64.exe`。脚本从含空格和中文的独立目录启动 EXE，检查旧数据兼容、重复启动、登记目录、复制粘贴、编辑保存、导出和关闭服务，并清除系统 Node 的 PATH。
+
+### macOS：用 Raycast 无感启动源码版
+
+首次使用先安装 Node.js 22.13+ 并在项目内执行 `pnpm install`。在 Raycast 的 **Script Commands** 中添加本项目根目录，之后搜索 `skill-admin` 即可启动。已经登记该目录的用户无需重新配置，原有启动命令和别名可继续使用，新增的辅助命令也会自动出现。
+
+| Raycast 命令 | 行为 |
+| --- | --- |
+| `skill-admin` | 后台启动，等页面就绪后打开浏览器；重复点击复用同一个服务 |
+| `skill-admin 停止` | 停止本启动器管理的后台服务 |
+| `skill-admin 重启` | 重启后台服务并打开页面 |
+| `skill-admin 状态` | 显示运行状态、地址和日志位置 |
+| `skill-admin 日志` | 在 iTerm 新窗口中查看实时日志，按 Ctrl+C 结束日志查看 |
+
+普通启动、停止和重启都不弹命令行窗口；只有主动选择「日志」时才打开 iTerm。关闭浏览器页面后，服务仍在后台运行；通过「停止」结束，或在注销时自动结束。不设置登录自启。
+
+该入口运行当前源码的开发模式，继续使用项目内 `.skill-manager/` 数据。后台任务由当前用户的 launchd 管理，按项目路径和端口区分。它会检查服务身份；端口被其他程序占用时提示错误，不会把其他工具当成 Skill Admin，也不会停止它们。由 `pnpm dev` 等其他方式启动的同项目服务可直接打开，但需要回到原启动位置停止后，才能交给本启动器管理。
+
+日志位于 `.skill-manager/launcher/service.log`；下一次新建后台任务时，超过 5 MB 的旧日志会保留为 `service.log.previous`。启动报错时，Raycast 会显示原因和日志路径。依赖或 Node 版本变化后，可执行「重启」。启动器会从 PATH、Homebrew、`/usr/local/bin` 和 nvm 中查找 Node；自定义安装位置可以用 `SKILL_ADMIN_NODE` 指定可执行文件。
+
+同一入口也可在 iTerm 中使用：
+
+```sh
+./skill-admin.sh         # 启动并打开页面
+./skill-admin.sh status  # 查看状态
+./skill-admin.sh stop    # 停止
+./skill-admin.sh restart # 重启并打开页面
+./skill-admin.sh logs    # 在 iTerm 查看日志
+```
 
 ### 环境变量
 

@@ -2,7 +2,10 @@ import express from "express";
 import { z } from "zod";
 import { Manager } from "./service.js";
 import { Failure } from "./storage.js";
-export function createApp(manager: Manager) {
+export function createApp(
+  manager: Manager,
+  runtime?: { root: string; instance: string | null },
+) {
   const app = express();
   app.use((req, res, next) => {
     const host = req.headers.host || "";
@@ -19,6 +22,11 @@ export function createApp(manager: Manager) {
     next();
   });
   app.use(express.json({ limit: "4mb" }));
+  if (runtime) {
+    app.get("/api/health", (_req, res) =>
+      res.json({ service: "skill-manager", ...runtime }),
+    );
+  }
   const route =
     (fn: (req: any) => Promise<any>) =>
     async (req: any, res: any, next: any) => {

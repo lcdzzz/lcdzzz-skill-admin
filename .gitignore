@@ -12,6 +12,7 @@ dist/
 build/
 release/
 release-runtime/
+release-macos*/
 coverage/
 *.log
 
@@ -24,10 +25,6 @@ coverage/
 REQUIREMENTS.md
 detailed-design.md
 docs/superpowers/
-
-# Obsolete personal launcher with a machine-specific absolute path
-skill-admin.sh
-
 
 # Portable desktop packages
 release-desktop/

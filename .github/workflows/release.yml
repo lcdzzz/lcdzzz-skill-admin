@@ -6,7 +6,7 @@ on:
       - "v*"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -16,12 +16,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-14
+          - runner: macos-15
             artifact: macos-arm64
-            archive: tar.gz
+            archive: dmg
           - runner: macos-15-intel
             artifact: macos-x64
-            archive: tar.gz
+            archive: dmg
           - runner: windows-latest
             artifact: windows-x64
             archive: zip
@@ -29,8 +29,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
-        with:
-          version: 11.12.0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -47,10 +45,21 @@ jobs:
           cp -R build dist LICENSE README.md release-runtime/
       - run: node scripts/assemble-release.mjs release
 
-      - name: Create tarball
-        if: matrix.archive == 'tar.gz'
+      - name: Create macOS app and DMG
+        if: matrix.archive == 'dmg'
         shell: bash
-        run: tar -czf "skill-manager-${{ github.ref_name }}-${{ matrix.artifact }}.tar.gz" -C release .
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          mkdir release-macos
+          ./scripts/package-macos.sh release release-macos
+      - name: Upload macOS DMG
+        if: matrix.archive == 'dmg'
+        uses: actions/upload-artifact@v4
+        with:
+          name: skill-manager-${{ matrix.artifact }}
+          path: release-macos/*.dmg
+          if-no-files-found: error
       - name: Create zip
         if: matrix.archive == 'zip'
         shell: pwsh
@@ -71,12 +80,16 @@ jobs:
         with:
           name: skill-manager-windows-desktop
           path: release-desktop/*.exe
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: skill-manager-${{ matrix.artifact }}
-          path: skill-manager-${{ github.ref_name }}-${{ matrix.artifact }}.${{ matrix.archive }}
+          path: skill-manager-${{ github.ref_name }}-${{ matrix.artifact }}.zip
+          if-no-files-found: error
 
   publish:
+    permissions:
+      contents: write
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -87,4 +100,5 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           files: release-assets/*
+          fail_on_unmatched_files: true
           generate_release_notes: true

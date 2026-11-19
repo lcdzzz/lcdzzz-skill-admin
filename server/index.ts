@@ -8,7 +8,17 @@ const root = process.env.SKILL_MANAGER_ROOT
   ? path.resolve(process.env.SKILL_MANAGER_ROOT)
   : path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const app = createApp(
-  new Manager(new Repository(path.join(root, ".skill-manager"))),
+  new Manager(
+    new Repository(
+      process.env.SKILL_MANAGER_DATA_DIR
+        ? path.resolve(process.env.SKILL_MANAGER_DATA_DIR)
+        : path.join(root, ".skill-manager"),
+    ),
+  ),
+  {
+    root,
+    instance: process.env.SKILL_ADMIN_INSTANCE || null,
+  },
 );
 if (process.env.NODE_ENV === "production") {
   app.use(express.static(path.join(root, "dist")));
